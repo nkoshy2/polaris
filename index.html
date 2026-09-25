@@ -245,6 +245,31 @@ main{ flex:1; max-width:1080px; width:100%; margin:0 auto; padding:20px 18px cal
 .task-menu-btn:hover{ background:var(--surface-2); color:var(--ink-soft); }
 .task-menu-btn svg{ width:16px; height:16px; }
 
+/* Focus view — deliberately short lists answer “what should I do next?”
+   without turning the planner into another dense dashboard. */
+.focus-stack{ display:grid; gap:22px; }
+.focus-hero{ background:linear-gradient(135deg, var(--ink), #385849); color:var(--surface); border-radius:var(--radius-lg); padding:22px; box-shadow:var(--shadow); }
+.focus-kicker{ font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; opacity:.72; }
+.focus-hero h1{ color:var(--surface); font-size:27px; margin-top:3px; }
+.focus-hero p{ color:rgba(255,253,249,.76); margin-top:5px; }
+.focus-section-head{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:10px; }
+.focus-section-head h2{ font-size:21px; }
+.focus-section-head span{ color:var(--ink-faint); font-size:12px; font-family:var(--font-mono); }
+.focus-list{ display:grid; gap:9px; }
+.focus-card{ position:relative; border-left:4px solid var(--accent); }
+.focus-card.deadline{ border-left-color:var(--urgent); }
+.focus-card .task-meta{ margin-top:7px; }
+.priority-pill{ background:var(--surface-2); color:var(--ink-soft); }
+.priority-pill.next{ background:#E7EEE7; color:#496851; }
+.priority-pill.important{ background:var(--gold-tint); color:#8A6818; }
+.priority-pill.soon{ background:#EDF1EE; color:#62776A; }
+.next-btn{ flex:none; border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); border-radius:var(--radius-pill); padding:5px 9px; cursor:pointer; font:600 11px var(--font-body); }
+.next-btn:hover{ color:var(--ink); background:var(--accent-tint); border-color:var(--accent); }
+.backlog-groups{ display:grid; grid-template-columns:repeat(auto-fit,minmax(235px,1fr)); gap:12px; }
+.backlog-group{ background:var(--surface-2); border-radius:var(--radius); padding:13px; }
+.backlog-group h3{ font-size:15px; margin-bottom:9px; }
+.backlog-group .task-card{ background:var(--surface); margin-top:8px; }
+
 /* ==========================================================================
    CATEGORY VIEW — categories span horizontally as columns; within each
    column, subcategories (and their tasks) stack vertically.
@@ -534,7 +559,11 @@ main{ flex:1; max-width:1080px; width:100%; margin:0 auto; padding:20px 18px cal
     </div>
 
     <nav class="view-switcher" id="viewSwitcher">
-      <button class="view-tab active" data-view="category">
+      <button class="view-tab active" data-view="focus">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.8H20l-5 3.6 1.9 5.8-4.9-3.6-4.9 3.6L9 12.4 4 8.8h6.1L12 3z"/></svg>
+        Focus
+      </button>
+      <button class="view-tab" data-view="category">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
         Category
       </button>
@@ -565,6 +594,7 @@ main{ flex:1; max-width:1080px; width:100%; margin:0 auto; padding:20px 18px cal
 
   <!-- =================== MAIN VIEWS =================== -->
   <main id="mainContent">
+    <section id="view-focus" class="view-panel"></section>
     <section id="view-category" class="view-panel"></section>
     <section id="view-week" class="view-panel hidden"></section>
     <section id="view-kanban" class="view-panel hidden"></section>
@@ -637,10 +667,20 @@ main{ flex:1; max-width:1080px; width:100%; margin:0 auto; padding:20px 18px cal
         </div>
       </div>
       <div class="field">
+        <label>Priority</label>
+        <div class="chip-row" id="taskPriorityChips">
+          <div class="chip" data-priority="next">Do next</div>
+          <div class="chip" data-priority="important">Important</div>
+          <div class="chip" data-priority="soon">Soon</div>
+          <div class="chip active" data-priority="normal">Normal</div>
+        </div>
+        <div class="field-hint">Priority is separate from a hard deadline.</div>
+      </div>
+      <div class="field">
         <label class="toggle-row" style="padding:0; border:none;">
           <span>
-            <span class="toggle-row-label">Repeats daily</span>
-            <span class="toggle-row-desc" style="display:block;">Excluded from the Kanban board</span>
+            <span class="toggle-row-label">Ongoing routine</span>
+            <span class="toggle-row-desc" style="display:block;">Keeps this task out of Kanban; it does not create new repeats.</span>
           </span>
           <span class="switch"><input type="checkbox" id="taskRecurring"/><span class="slider"></span></span>
         </label>
@@ -783,9 +823,10 @@ const state = {
   syncCode: localStorage.getItem(LS_KEYS.syncCode) || null,
   tasks: JSON.parse(localStorage.getItem(LS_KEYS.tasks) || "[]"),
   categories: JSON.parse(localStorage.getItem(LS_KEYS.categories) || "null") || DEFAULT_CATEGORIES,
-  currentView: "category",
+  currentView: "focus",
   editingTaskId: null,
   editingStatus: "todo",
+  editingPriority: "normal",
   editingCategory: null,
   editingSubcat: null,
   msalAccount: null,
@@ -1063,6 +1104,17 @@ function parseDatePhrase(text){
     return { date: d, match: m[0] };
   }
 
+  // "due on the 30th" — choose this month unless that date has passed.
+  // Requiring "the" or an ordinal keeps task titles such as "HW 3" intact.
+  m = text.match(/\b(?:(?:on\s+)?the\s+)?(\d{1,2})(st|nd|rd|th)\b/i);
+  if (m) {
+    const day = parseInt(m[1], 10);
+    const now = new Date();
+    let d = new Date(now.getFullYear(), now.getMonth(), day);
+    if (d < startOfDay(now)) d = new Date(now.getFullYear(), now.getMonth() + 1, day);
+    return { date: d, match: m[0] };
+  }
+
   return null;
 }
 
@@ -1081,13 +1133,33 @@ function parseTimePhrase(text){
 
 function parseQuickAdd(raw){
   let text = raw.trim();
-  let category = null, subcat = null;
+  let category = null, subcat = null, project = null, priority = "normal";
 
   const shMatch = findShorthandMatch(text);
   if (shMatch) {
     category = shMatch.catId;
     subcat = shMatch.subId;
     text = text.slice(shMatch.matchLength).trim();
+  }
+
+  // A prefix such as “AE 321:” or “CHESS:” is useful context even when the
+  // user has not created a matching shorthand code yet. Keep it visible as a
+  // project label, while putting course-like prefixes in the Classes category.
+  const projectMatch = text.match(/^([A-Z]{2,10}(?:\s+\d{3})?)\s*:\s*/);
+  if (projectMatch) {
+    project = projectMatch[1];
+    text = text.slice(projectMatch[0].length);
+    if (!category) category = /^AE\s+\d{3}$|^ENG\s+\d{3}$/.test(project) ? "classes" : "extracurriculars";
+  }
+
+  // These phrases describe intent, not a deadline. Preserve that distinction
+  // in the task model and remove the prose from the actionable title.
+  if (/\bASAP\b/i.test(text)) {
+    priority = "important";
+    text = text.replace(/\bASAP\b/ig, "");
+  } else if (/\bat earliest convenience\b/i.test(text)) {
+    priority = "soon";
+    text = text.replace(/\bat earliest convenience\b/ig, "");
   }
 
   let dueDate = null, dueTime = null;
@@ -1114,7 +1186,7 @@ function parseQuickAdd(raw){
 
   return {
     title: text || raw.trim(),
-    category, subcat,
+    category, subcat, project, priority,
     dueDate: dueDate ? dueDate.toISOString() : null,
     dueTime
   };
@@ -1133,8 +1205,12 @@ function renderQuickAddPreview(){
     bits.push(`<span class="pill" style="background:${cat.color}22; color:${cat.color};">${escapeHtml(cat.name)}</span>`);
     if (sub) bits.push(`<span class="pill sub">${escapeHtml(sub.name)}</span>`);
   }
+  if (parsed.project) bits.push(`<span class="pill sub">${escapeHtml(parsed.project)}</span>`);
   if (parsed.dueDate) {
     bits.push(`<span class="pill gold">${escapeHtml(dueLabel({dueDate:parsed.dueDate, dueTime:parsed.dueTime, status:'todo'}))}</span>`);
+  }
+  if (parsed.priority !== "normal") {
+    bits.push(`<span class="pill priority-pill ${parsed.priority}">${parsed.priority === "important" ? "Important" : "Soon"}</span>`);
   }
   if (bits.length === 0) { preview.classList.remove("show"); preview.innerHTML=""; return; }
   preview.innerHTML = bits.join("");
@@ -1176,6 +1252,24 @@ function setTaskStatus(id, status){
   if (status === "done") toast("Marked done — nice work");
 }
 
+function setTaskPriority(id, priority){
+  const target = state.tasks.find(x => x.id === id);
+  if (!target) return;
+  // “Do next” remains a genuine decision: promoting a new task gently moves
+  // the previous one back to Important instead of creating an endless queue.
+  if (priority === "next") {
+    state.tasks.filter(t => t.priority === "next" && t.id !== id).forEach(t => {
+      t.priority = "important";
+      cloudSaveTask(t);
+    });
+  }
+  target.priority = priority;
+  persistTasks();
+  cloudSaveTask(target);
+  renderCurrentView();
+  if (priority === "next") toast("Set as your next task");
+}
+
 function quickAddSubmit(raw){
   const parsed = parseQuickAdd(raw);
   if (!parsed.title) return;
@@ -1184,9 +1278,11 @@ function quickAddSubmit(raw){
     title: parsed.title,
     category: parsed.category || "personal",
     subcat: parsed.subcat || null,
+    project: parsed.project || null,
     dueDate: parsed.dueDate,
     dueTime: parsed.dueTime,
     status: "todo",
+    priority: parsed.priority,
     recurring: false,
     notes: "",
     createdAt: new Date().toISOString(),
@@ -1208,6 +1304,7 @@ function renderCurrentView(){
   document.getElementById(`view-${state.currentView}`).classList.remove("hidden");
   document.querySelectorAll(".view-tab").forEach(t => t.classList.toggle("active", t.dataset.view === state.currentView));
 
+  if (state.currentView === "focus") renderFocusView();
   if (state.currentView === "category") renderCategoryView();
   if (state.currentView === "week") renderWeekView();
   if (state.currentView === "kanban") renderKanbanView();
@@ -1219,6 +1316,8 @@ function taskCardHtml(t){
   const sub = cat && t.subcat ? cat.subcats.find(s => s.id === t.subcat) : null;
   const overdue = isOverdue(t);
   const dueToday = isDueToday(t);
+  const priority = t.priority || "normal";
+  const priorityLabel = { next:"Do next", important:"Important", soon:"Soon" }[priority];
   return `
     <div class="task-card ${t.status==='done'?'done':''} ${overdue?'overdue':''}" data-id="${t.id}">
       <div class="check" data-action="toggle" data-id="${t.id}">${CHECK_SVG}</div>
@@ -1227,10 +1326,13 @@ function taskCardHtml(t){
         <div class="task-meta">
           ${cat ? `<span class="pill" style="background:${cat.color}22; color:${cat.color};">${escapeHtml(cat.name)}</span>` : ""}
           ${sub ? `<span class="pill sub">${escapeHtml(sub.name)}${sub.code?` <span class="code">${escapeHtml(sub.code)}</span>`:""}</span>` : ""}
-          ${t.recurring ? `<span class="pill sub">Daily</span>` : ""}
+          ${t.project ? `<span class="pill sub">${escapeHtml(t.project)}</span>` : ""}
+          ${priorityLabel ? `<span class="pill priority-pill ${priority}">${priorityLabel}</span>` : ""}
+          ${t.recurring ? `<span class="pill sub">Ongoing</span>` : ""}
           <span class="task-due ${overdue?'urgent':''}">${CLOCK_SVG}${escapeHtml(dueLabel(t))}</span>
         </div>
       </div>
+      ${priority !== "next" && t.status !== "done" ? `<button class="next-btn" data-action="make-next" data-id="${t.id}">Do next</button>` : ""}
       <button class="task-menu-btn" data-action="edit" data-id="${t.id}" aria-label="Edit task">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
       </button>
@@ -1244,6 +1346,63 @@ function sortByDue(list){
     if (!b.dueDate) return -1;
     return new Date(a.dueDate) - new Date(b.dueDate);
   });
+}
+
+function focusRank(t){
+  const d = taskDueDate(t);
+  const today = startOfDay(new Date());
+  if (d && startOfDay(d) < today) return 0;
+  if (d && isSameDay(d, today)) return 1;
+  if (t.priority === "next") return 2;
+  if (d && startOfDay(d) <= addDays(today, 2)) return 3;
+  if (t.priority === "important") return 4;
+  if (t.priority === "soon") return 5;
+  return 6;
+}
+
+function sortForFocus(list){
+  return [...list].sort((a,b) => focusRank(a) - focusRank(b) || (taskDueDate(a)?.getTime() || Infinity) - (taskDueDate(b)?.getTime() || Infinity));
+}
+
+function focusTaskHtml(t){
+  const hardDeadline = !!t.dueDate;
+  return `<div class="task-card focus-card ${hardDeadline ? "deadline" : ""} ${t.status==='done'?'done':''}" data-id="${t.id}">
+    <div class="check" data-action="toggle" data-id="${t.id}">${CHECK_SVG}</div>
+    <div class="task-body">
+      <div class="task-title">${escapeHtml(t.title)}</div>
+      <div class="task-meta">
+        ${t.project ? `<span class="pill sub">${escapeHtml(t.project)}</span>` : ""}
+        ${hardDeadline ? `<span class="pill ${isOverdue(t)?"urgent":"gold"}">${isOverdue(t)?"Overdue · ":"Due · "}${escapeHtml(dueLabel(t))}</span>` : `<span class="pill priority-pill ${(t.priority || "normal")}">${({next:"Do next",important:"Important",soon:"Soon",normal:"No deadline"})[t.priority || "normal"]}</span>`}
+      </div>
+    </div>
+    ${(t.priority || "normal") !== "next" ? `<button class="next-btn" data-action="make-next" data-id="${t.id}">Do next</button>` : ""}
+    <button class="task-menu-btn" data-action="edit" data-id="${t.id}" aria-label="Edit task">✎</button>
+  </div>`;
+}
+
+function renderFocusView(){
+  const el = document.getElementById("view-focus");
+  const open = state.tasks.filter(t => t.status !== "done");
+  if (!open.length) {
+    el.innerHTML = `<div class="focus-stack"><div class="focus-hero"><div class="focus-kicker">Focus</div><h1>Your runway is clear.</h1><p>Add one small, concrete next step when you are ready.</p></div>${emptyStateHtml("Nothing to do right now", "Quick Add understands deadlines and ASAP without making you fill in a form.")}</div>`;
+    return;
+  }
+  const today = startOfDay(new Date());
+  const todayTasks = sortForFocus(open.filter(t => t.dueDate && isSameDay(taskDueDate(t), today)));
+  const next = sortForFocus(open).slice(0, 1);
+  const upcoming = sortByDue(open.filter(t => {
+    const d = taskDueDate(t); return d && d > today && !isSameDay(d, today) && d <= addDays(today, 7);
+  })).slice(0, 6);
+  const backlog = sortForFocus(open.filter(t => !t.dueDate && t.priority !== "next"));
+  const groups = {};
+  backlog.forEach(t => { const key = t.project || state.categories[t.category]?.name || "Other"; (groups[key] ||= []).push(t); });
+  el.innerHTML = `<div class="focus-stack">
+    <div class="focus-hero"><div class="focus-kicker">Focus</div><h1>What should I work on next?</h1><p>Deadlines stay visible. Priority helps you choose among everything else.</p></div>
+    <section><div class="focus-section-head"><h2>Do next</h2><span>one clear choice</span></div><div class="focus-list">${next.map(focusTaskHtml).join("")}</div></section>
+    ${todayTasks.length ? `<section><div class="focus-section-head"><h2>Due today</h2><span>${todayTasks.length} ${todayTasks.length===1?"task":"tasks"}</span></div><div class="focus-list">${todayTasks.map(focusTaskHtml).join("")}</div></section>` : ""}
+    ${upcoming.length ? `<section><div class="focus-section-head"><h2>Upcoming deadlines</h2><span>next 7 days</span></div><div class="focus-list">${upcoming.map(focusTaskHtml).join("")}</div></section>` : ""}
+    ${backlog.length ? `<section><div class="focus-section-head"><h2>Backlog</h2><span>no deadline</span></div><div class="backlog-groups">${Object.entries(groups).map(([name, tasks]) => `<div class="backlog-group"><h3>${escapeHtml(name)}</h3>${tasks.slice(0,4).map(focusTaskHtml).join("")}</div>`).join("")}</div></section>` : ""}
+  </div>`;
 }
 
 function renderCategoryView(){
@@ -1266,9 +1425,11 @@ function renderCategoryView(){
       </div>`;
 
     const withSub = {};
+    const withProject = {};
     const noSub = [];
     catTasks.forEach(t => {
       if (t.subcat) { (withSub[t.subcat] = withSub[t.subcat] || []).push(t); }
+      else if (t.project) { (withProject[t.project] = withProject[t.project] || []).push(t); }
       else noSub.push(t);
     });
 
@@ -1277,6 +1438,12 @@ function renderCategoryView(){
       if (!list || list.length===0) continue;
       html += `<div class="subgroup">
         <div class="subgroup-label"><span class="subgroup-title">${escapeHtml(sub.name)}</span></div>
+        <div class="task-list">${sortByDue(list).map(taskCardHtml).join("")}</div>
+      </div>`;
+    }
+    for (const [project, list] of Object.entries(withProject)) {
+      html += `<div class="subgroup">
+        <div class="subgroup-label"><span class="subgroup-title">${escapeHtml(project)}</span></div>
         <div class="task-list">${sortByDue(list).map(taskCardHtml).join("")}</div>
       </div>`;
     }
@@ -1335,7 +1502,7 @@ function renderKanbanView(){
     { status:"inprogress", title:"In progress" },
     { status:"done", title:"Done" }
   ];
-  let html = `<div class="kanban-note">${CLOCK_SVG.replace('width="15"','width="13"')}Daily recurring tasks live in Category &amp; Week view only.</div>`;
+  let html = `<div class="kanban-note">${CLOCK_SVG.replace('width="15"','width="13"')}Ongoing routines live in Focus, Category, and Week views only.</div>`;
   html += `<div class="kanban">`;
   for (const col of cols) {
     const list = sortByDue(eligible.filter(t => (t.status||"todo") === col.status));
@@ -1691,9 +1858,11 @@ function openTaskModal(task){
   state.editingCategory = task?.category || Object.keys(state.categories)[0];
   state.editingSubcat = task?.subcat || null;
   state.editingStatus = task?.status || "todo";
+  state.editingPriority = task?.priority || "normal";
 
   document.querySelectorAll("#taskCategoryChips .chip").forEach(c => c.classList.toggle("active", c.dataset.cat === state.editingCategory));
   document.querySelectorAll("#taskStatusChips .chip").forEach(c => c.classList.toggle("active", c.dataset.status === state.editingStatus));
+  document.querySelectorAll("#taskPriorityChips .chip").forEach(c => c.classList.toggle("active", c.dataset.priority === state.editingPriority));
   renderTaskSubcatChips(state.editingCategory, state.editingSubcat);
 
   openOverlay("taskModalOverlay");
@@ -1712,6 +1881,7 @@ function handleTaskFormSubmit(e){
     dueDate: dateVal ? new Date(dateVal + "T00:00:00").toISOString() : null,
     dueTime: document.getElementById("taskTime").value || null,
     status: state.editingStatus,
+    priority: state.editingPriority,
     recurring: document.getElementById("taskRecurring").checked,
     notes: document.getElementById("taskNotes").value.trim(),
     createdAt: state.tasks.find(t=>t.id===state.editingTaskId)?.createdAt || new Date().toISOString(),
@@ -1796,6 +1966,9 @@ function wireEvents(){
     const toggleEl = e.target.closest('[data-action="toggle"]');
     if (toggleEl) { toggleComplete(toggleEl.dataset.id); return; }
 
+    const nextEl = e.target.closest('[data-action="make-next"]');
+    if (nextEl) { setTaskPriority(nextEl.dataset.id, "next"); return; }
+
     const advanceEl = e.target.closest('[data-action="advance"]');
     if (advanceEl) { setTaskStatus(advanceEl.dataset.id, advanceEl.dataset.next); return; }
 
@@ -1848,6 +2021,11 @@ function wireEvents(){
     const chip = e.target.closest(".chip"); if (!chip) return;
     state.editingStatus = chip.dataset.status;
     document.querySelectorAll("#taskStatusChips .chip").forEach(c => c.classList.toggle("active", c===chip));
+  });
+  document.getElementById("taskPriorityChips").addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip"); if (!chip) return;
+    state.editingPriority = chip.dataset.priority;
+    document.querySelectorAll("#taskPriorityChips .chip").forEach(c => c.classList.toggle("active", c===chip));
   });
 
   // Settings modal
