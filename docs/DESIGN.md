@@ -1,0 +1,127 @@
+# Polaris design notes
+
+This document records the product rules and the non-obvious technical decisions.
+The rules here are implemented in `src/domain/` and covered by `tests/unit/`.
+
+## Platform and architecture
+
+Polaris is a local-first web app: static files, no server, no accounts, and no network requests.
+
+| Layer        | Location        | Responsibility                                                |
+| ------------ | --------------- | ------------------------------------------------------------- |
+| Domain       | `src/domain/`   | Data model, validation, every task rule. Pure functions only. |
+| Storage      | `src/storage/`  | File format, migrations, repair-on-load, backup/restore.      |
+| State        | `src/state/`    | Holds current data, persists each change, undo history.       |
+| Presentation | `src/ui/`       | Preact components. No business rules.                          |
+
+**Why these choices**
+
+- **Preact + Vite + TypeScript.** The UI has lots of interdependent state (filters, selection, dialogs, toasts). A
+  small component library (Preact, ~4 KB) avoids hand-written DOM syncing bugs without React's weight. Vite needs no
+  plugin: TypeScript's JSX settings point JSX at Preact.
+- **localStorage, not IndexedDB.** It is synchronous, which keeps the save path simple and atomic per key. It has room
+  for well over 10,000 typical tasks (about 5 MB per origin). The `Repository` class is the only code that touches
+  storage, so moving to IndexedDB later only means swapping that one class.
+- **Snapshot undo.** Every change records the previous `AppData`, and undo restores it. Data is immutable, so a
+  snapshot is a cheap reference, not a copy. History is capped at 50 entries and is not persisted.
+
+## Organisation: tags only
+
+Tags are the only way to group tasks. A task has zero or more tags, and "Untagged" shows tasks with none. There are
+no separate projects, lists or folders, so there are never two overlapping ways to do the same thing.
+"Moving" a task between tags means editing its tags; nothing else about the task changes.
+
+Deleting a tag removes it from every task. The tasks themselves are never deleted, and the action can be undone.
+Tag names are unique, ignoring case.
+
+## Importance, urgency, due date, status
+
+These are separate concepts and are never mixed together:
+
+| Concept    | Source                         | Values                                   |
+| ---------- | ------------------------------ | ---------------------------------------- |
+| Importance | Set by the user                | high, normal (default), low              |
+| Due date   | Set by the user, optional      | a local calendar date (`YYYY-MM-DD`)     |
+| Urgency    | **Derived** from due + today   | overdue, today, soon (1–7 days), later, none |
+| Status     | Set by the user                | open, or completed (`completedAt` set)   |
+
+Completed tasks have no urgency: a finished task is never shown as overdue.
+
+## Focus (the recommended list)
+
+Focus uses fixed tiers instead of a score. An open task appears in the **first** tier it matches:
+
+1. Overdue
+2. Due today
+3. High importance, due within 7 days
+4. High importance (any other date, or none)
+5. Due within 7 days
+
+Open tasks that match no tier are not shown in Focus; they are always in All tasks. Inside a tier, tasks are ordered
+by earliest due date (tasks with no date last), then higher importance, then oldest created. The same ordering is the
+"Recommended" sort in All tasks. The app explains these rules under "How Focus decides what to show".
+
+## Steps (subtasks)
+
+Steps are one level deep and belong to a single task. They are deliberately not tasks: they have no due date,
+importance or tags of their own.
+
+The invariant is that **a completed task never has open steps.** It is enforced by these rules:
+
+- Completing a task marks all of its steps done.
+- Unchecking a step of a completed task reopens the task.
+- Adding an open step to a completed task reopens it.
+- Finishing every step does **not** complete the task; the user decides when it's done.
+- Reopening a task leaves its steps as they were.
+- Deleting a task deletes its steps. This can be undone.
+- Duplicating a task copies its steps, all unchecked, with new IDs.
+
+## Progress rules
+
+- Totals count **tasks only**. A task with 10 steps counts as one task.
+- A task counts as completed only when the task itself is completed, however many of its steps are done.
+- Step progress is shown per task as "X of Y steps".
+- Percentages are `floor(completed / total × 100)`, so 100% only ever means everything is done. With no tasks, no
+  percentage is shown.
+- Each overview count on Focus (Overdue, Due today, Due in the next 7 days) equals the number of tasks in the list it
+  links to. A unit test checks this.
+- "Completed in the last 7 days" counts tasks whose completion falls on today or one of the six days before, in local
+  time.
+
+## Data safety
+
+- **Validation** runs on every create and edit (`src/domain/validation.ts`) and again when data is loaded or imported
+  (`src/storage/schema.ts`).
+- **Repair, don't discard.** When loading, any record that is recognisably an object is kept, and broken fields are
+  replaced with safe defaults. An over-long title is moved into the notes. Every repair is listed for the user, and
+  the untouched original is saved as a *recovery copy*, which can be downloaded from Backup.
+- **Previous copy.** Each save first copies the last good data to `polaris.previous`. If the current data can't be
+  read (for example after a truncated write), Polaris loads the previous copy and says so.
+- **Newer formats.** If the stored data was written by a newer schema version, Polaris goes read-only rather than
+  risk overwriting it.
+- **Failed saves** leave your changes on screen and show a persistent banner with *Try saving again* and *Export
+  backup*.
+- **Other tabs.** Changes saved in another tab are loaded through the `storage` event. The last write wins, and undo
+  history is reset.
+- **Destructive actions:** deleting one task asks first and can be undone. Bulk delete, tag delete and restoring a
+  backup all ask first and can be undone. Undo stays available in the header and with Ctrl+Z, so it doesn't depend on
+  the toast still being visible.
+
+## Accessibility
+
+The target is WCAG 2.2 AA:
+
+- Native elements are used throughout (`<dialog>`, `<button>`, labelled form controls), so behaviour stays predictable.
+- Focus is managed explicitly. Dialogs return focus to whatever opened them. When a completed task leaves the list,
+  focus moves to a neighbouring row or the heading.
+- Live regions announce messages: `role=status` for results and notifications, `role=alert` for errors.
+- Meaning is never carried by colour alone: overdue, importance and completion are always shown as text, with icons
+  as a supplement.
+- Reduced motion is respected. Toasts slide in rather than fade, so their text never drops below the contrast minimum.
+- Automated checks: axe-core runs on every view and dialog in both the desktop and mobile layouts (`e2e/a11y.spec.ts`).
+
+## Multi-device readiness
+
+The current version is single-device, with export and import for moving data. To keep future sync possible without a
+migration, IDs are random UUIDs and every record has `createdAt` and `updatedAt`. Sync would still need deletion
+tombstones and a conflict policy; see Future work in the README.
