@@ -100,7 +100,7 @@ allow personal access tokens) and hands them to the Polaris tab. The merge rules
 | Title or deadline changed                  | Updated, unless the user edited that field since the last sync       |
 | Submitted                                  | The task is completed (with its steps), once per submission          |
 | Missing from a complete fetch              | `removedAt` is set; the task is never deleted                        |
-| An assignment the user deleted             | Never re-created; its key is kept in `dismissedSources`              |
+| An assignment the user deleted             | Never re-created; listed in `dismissedSources` until allowed again   |
 | Same assignment in Canvas and Gradescope   | One task; the second source is linked as an alias                    |
 
 - **Course tags.** The tag is "DEPT number" when the course name contains one, so Canvas's
@@ -120,6 +120,9 @@ allow personal access tokens) and hands them to the Polaris tab. The merge rules
 - **Removed upstream.** A batch can say which deadline window it fetched completely. Only linked tasks with a
   deadline inside that window can be flagged, so a narrower fetch never flags assignments outside it.
 - **Undo.** Each sync is one undo step. A sync that changes nothing records no step.
+- **Extension messages.** The extension's content script and the page use `window.postMessage` on the page's own
+  origin (protocol in `src/state/connector.ts`). Polaris accepts only messages from its own window and origin, and
+  validates every batch with `parseSyncBatch`. Sync status is kept in memory and shown under Backup.
 - **Copies.** Duplicating a synced task makes an ordinary, unlinked task.
 
 ## Data safety

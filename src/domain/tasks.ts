@@ -9,7 +9,7 @@
  *  - Finishing the last step does NOT complete the task; the user decides.
  *  - Re-opening a task leaves its steps as they were.
  */
-import type { AppData, Importance, Step, Tag, Task } from './types';
+import type { AppData, DismissedSource, Importance, Step, Tag, Task } from './types';
 import {
   LIMITS,
   ValidationError,
@@ -161,14 +161,16 @@ export function setStepDone(data: AppData, taskId: string, stepId: string, done:
 }
 
 /** Deleting a synced task dismisses its upstream keys so sync never re-creates it. */
-export function deleteTasks(data: AppData, ids: string[]): AppData {
+export function deleteTasks(data: AppData, ids: string[], ctx: Ctx): AppData {
   const targets = new Set(ids);
-  const dismissed = new Set(data.dismissedSources);
-  for (const t of data.tasks) {
-    if (targets.has(t.id) && t.source) [t.source.externalId, ...t.source.aliases].forEach((key) => dismissed.add(key));
-  }
-  const dismissedSources = dismissed.size === data.dismissedSources.length ? data.dismissedSources : [...dismissed];
-  return { ...data, tasks: data.tasks.filter((t) => !targets.has(t.id)), dismissedSources };
+  const dismissed: DismissedSource[] = data.tasks
+    .filter((t) => targets.has(t.id) && t.source)
+    .map((t) => ({ keys: [t.source!.externalId, ...t.source!.aliases], title: t.title, dismissedAt: ctx.now() }));
+  return {
+    ...data,
+    tasks: data.tasks.filter((t) => !targets.has(t.id)),
+    dismissedSources: dismissed.length ? [...data.dismissedSources, ...dismissed] : data.dismissedSources,
+  };
 }
 
 /** Copies a task as a new open task with all steps reset. The copy is never linked to an assignment. */

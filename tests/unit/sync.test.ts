@@ -101,13 +101,14 @@ describe('reading a batch from the extension', () => {
         canvas(), // duplicate key
         { ...canvas(), externalId: '' },
         { ...gradescope() },
+        { ...canvas(), externalId: 'gradescope:assignment:1' },
         'junk',
       ],
       window: { start: '2026-10-04T00:00:00Z', end: 'later' },
     });
     expect(result?.batch.items).toEqual([{ ...canvas(), title: 'Homework 5', url: '', dueAt: null, submitted: false }]);
     expect(result?.batch.window).toBeUndefined();
-    expect(result?.rejected).toHaveLength(3);
+    expect(result?.rejected).toHaveLength(4);
   });
 });
 
@@ -202,12 +203,15 @@ describe('deleted and removed assignments', () => {
   it('never re-creates an assignment the user deleted, until it is restored', () => {
     const ctx = testCtx();
     const first = sync(emptyData(), [canvas()], ctx).data;
-    const deleted = deleteTasks(first, [only(first).id]);
-    expect(deleted.dismissedSources).toEqual([canvas().externalId]);
+    const deleted = deleteTasks(first, [only(first).id], ctx);
+    expect(deleted.dismissedSources).toEqual([{ keys: [canvas().externalId], title: 'Homework 5', dismissedAt: ctx.now() }]);
     expect(sync(deleted, [canvas()], ctx).data.tasks).toHaveLength(0);
 
     const restored = restoreDismissed(deleted, [canvas().externalId]);
+    expect(restored.dismissedSources).toEqual([]);
     expect(sync(restored, [canvas()], ctx).data.tasks).toHaveLength(1);
+    expect(restoreDismissed(deleted).dismissedSources).toEqual([]);
+    expect(restoreDismissed(deleted, ['other'])).toBe(deleted);
   });
 
   it('flags a task whose assignment disappeared inside a complete fetch, without deleting it', () => {
@@ -265,8 +269,8 @@ describe('the same assignment in Canvas and Gradescope', () => {
   it('dismisses both when the linked task is deleted', () => {
     const ctx = testCtx();
     const linked = sync(sync(emptyData(), [canvas()], ctx).data, [gradescope()], ctx).data;
-    const deleted = deleteTasks(linked, [only(linked).id]);
-    expect(deleted.dismissedSources).toEqual([canvas().externalId, gradescope().externalId]);
+    const deleted = deleteTasks(linked, [only(linked).id], ctx);
+    expect(deleted.dismissedSources.map((d) => d.keys)).toEqual([[canvas().externalId, gradescope().externalId]]);
     expect(sync(deleted, [gradescope()], ctx).data.tasks).toHaveLength(0);
   });
 });
@@ -292,7 +296,7 @@ describe('storage of synced tasks', () => {
     const ctx = testCtx();
     let data = sync(emptyData(), [canvas(), canvas({ externalId: 'canvas:x:2', title: 'Gone' })], ctx).data;
     data = sync(data, [gradescope({ submitted: true })], ctx).data;
-    data = deleteTasks(data, [data.tasks[1]!.id]);
+    data = deleteTasks(data, [data.tasks[1]!.id], ctx);
     const kv = new MemoryStore();
     new Repository(kv, () => NOW).save(data);
     expect(new Repository(kv, () => NOW).load()).toMatchObject({ status: 'ok', data });
@@ -306,7 +310,7 @@ describe('storage of synced tasks', () => {
       savedAt: NOW,
       data: {
         tags: [],
-        dismissedSources: 'nope',
+        dismissedSources: [{ keys: ['k9'], title: '  Old  HW ' }, { title: 'no keys' }],
         tasks: [
           { id: 'a', title: 'Linked', source },
           { id: 'b', title: 'Same key', source },
@@ -317,7 +321,7 @@ describe('storage of synced tasks', () => {
     const { data, issues } = parseEnvelope(text, { now: NOW });
     expect(data.tasks.map((t) => t.source?.externalId ?? null)).toEqual(['k1', null, null]);
     expect(data.tasks[0]!.source).toMatchObject({ url: '', submittedKeys: ['k1'] });
-    expect(data.dismissedSources).toEqual([]);
+    expect(data.dismissedSources).toEqual([{ keys: ['k9'], title: 'Old HW', dismissedAt: NOW }]);
     expect(issues).toHaveLength(4);
   });
 });

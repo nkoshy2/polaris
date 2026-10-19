@@ -12,7 +12,7 @@
  */
 import { isValidDate, localDate } from './dates';
 import type { Ctx } from './tasks';
-import { SOURCE_KINDS, type AppData, type SourceKind, type Tag, type Task } from './types';
+import { SOURCE_KINDS, type AppData, type SourceKind, type Tag, type Task, type TaskSource } from './types';
 import { LIMITS, cleanLine } from './validation';
 
 /** One assignment as read from upstream. */
@@ -84,7 +84,7 @@ export function parseSyncBatch(raw: unknown): { batch: SyncBatch; rejected: stri
       rejected.push(`Item #${i + 1} had no usable title or ID.`);
       return;
     }
-    if (it.kind !== kind) {
+    if (it.kind !== kind || !externalId.startsWith(`${kind}:`)) {
       rejected.push(`“${title}” came from a different source than its batch.`);
       return;
     }
@@ -144,7 +144,7 @@ export function applySync(
   const autoComplete = options.autoComplete ?? true;
   const now = ctx.now();
   const summary: SyncSummary = { added: 0, updated: 0, completed: 0, removed: 0 };
-  const dismissed = new Set(data.dismissedSources);
+  const dismissed = new Set(data.dismissedSources.flatMap((d) => d.keys));
 
   const tasks = [...data.tasks];
   const tags: Tag[] = [...data.tags];
@@ -277,9 +277,19 @@ export function applySync(
   return { data: changed ? { ...data, tasks, tags } : data, summary };
 }
 
-/** Lets sync create a dismissed assignment's task again. */
-export function restoreDismissed(data: AppData, keys: string[]): AppData {
+/** Which sources a linked task came from: its own kind first, then its aliases' kinds. */
+export function linkedKinds(source: TaskSource): SourceKind[] {
+  const kinds: SourceKind[] = [source.kind];
+  for (const key of source.aliases) {
+    const kind = SOURCE_KINDS.find((k) => key.startsWith(`${k}:`));
+    if (kind && !kinds.includes(kind)) kinds.push(kind);
+  }
+  return kinds;
+}
+
+/** Lets sync create deleted assignments' tasks again: those sharing any of `keys`, or all of them. */
+export function restoreDismissed(data: AppData, keys?: string[]): AppData {
   const targets = new Set(keys);
-  const dismissedSources = data.dismissedSources.filter((k) => !targets.has(k));
+  const dismissedSources = keys ? data.dismissedSources.filter((d) => !d.keys.some((k) => targets.has(k))) : [];
   return dismissedSources.length === data.dismissedSources.length ? data : { ...data, dismissedSources };
 }

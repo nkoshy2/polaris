@@ -13,6 +13,7 @@ import {
   IMPORTANCE_LEVELS,
   SOURCE_KINDS,
   type AppData,
+  type DismissedSource,
   type Importance,
   type SourceKind,
   type Step,
@@ -249,11 +250,20 @@ export function normalizeData(input: unknown, now: string, newId: () => string):
     });
   });
 
-  const dismissedSources: string[] = [];
+  const dismissedSources: DismissedSource[] = [];
   if (Array.isArray(input.dismissedSources)) {
-    for (const key of input.dismissedSources) {
-      if (typeof key === 'string' && key && !dismissedSources.includes(key)) dismissedSources.push(key);
-    }
+    input.dismissedSources.forEach((d, i) => {
+      const keys = isObject(d) && Array.isArray(d.keys) ? [...new Set(d.keys.filter((k): k is string => typeof k === 'string' && !!k))] : [];
+      if (!keys.length) {
+        issues.push(`Skipped dismissed assignment #${i + 1}: it had no assignment key.`);
+        return;
+      }
+      dismissedSources.push({
+        keys,
+        title: cleanLine(isObject(d) ? d.title : '').slice(0, LIMITS.title) || 'Untitled assignment',
+        dismissedAt: isObject(d) && isIsoTimestamp(d.dismissedAt) ? d.dismissedAt : now,
+      });
+    });
   } else if (input.dismissedSources != null) {
     issues.push('The list of dismissed assignments was unreadable; started an empty one.');
   }

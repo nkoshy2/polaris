@@ -30,7 +30,7 @@ export const SOURCE_KINDS: readonly SourceKind[] = ['canvas', 'gradescope'];
  */
 export interface TaskSource {
   kind: SourceKind;
-  /** Stable upstream key, e.g. "canvas:canvas.illinois.edu:assignment:123". */
+  /** Stable upstream key starting with "<kind>:", e.g. "canvas:canvas.illinois.edu:assignment:123". */
   externalId: string;
   /** Upstream keys of the same assignment from another source (Canvas and Gradescope). */
   aliases: string[];
@@ -74,11 +74,18 @@ export interface Tag {
   updatedAt: string;
 }
 
+/** A synced task the user deleted. Sync never re-creates a task for any of its keys. */
+export interface DismissedSource {
+  /** The deleted task's externalId and aliases. */
+  keys: string[];
+  title: string;
+  dismissedAt: string;
+}
+
 export interface AppData {
   tasks: Task[];
   tags: Tag[];
-  /** Upstream keys of synced tasks the user deleted, so sync never re-creates them. */
-  dismissedSources: string[];
+  dismissedSources: DismissedSource[];
 }
 
 export const emptyData = (): AppData => ({ tasks: [], tags: [], dismissedSources: [] });

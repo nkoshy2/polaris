@@ -26,7 +26,9 @@ Backups (Export) and browser storage both use the same JSON structure.
         "updatedAt": "ISO-8601"
       }
     ],
-    "dismissedSources": ["canvas:canvas.illinois.edu:assignment:123"]
+    "dismissedSources": [
+      { "keys": ["canvas:canvas.illinois.edu:assignment:123"], "title": "Homework 4", "dismissedAt": "ISO-8601" }
+    ]
   }
 }
 ```
@@ -41,7 +43,7 @@ Backups (Export) and browser storage both use the same JSON structure.
 | `steps`       | Up to 100 steps; `done` is a boolean                                 |
 | `completedAt` | ISO-8601 timestamp, or `null` while open. When set, every step must be done. |
 | `source`      | `null` for tasks the user made, or an assignment link (below)       |
-| `dismissedSources` | Upstream keys of synced tasks the user deleted; sync never re-creates them |
+| `dismissedSources` | Synced tasks the user deleted: their upstream `keys`, `title` and `dismissedAt`. Sync never re-creates a task for any of those keys |
 | Tag `name`    | 1–40 characters, unique ignoring case                                |
 
 ### Assignment link (`source`)
@@ -65,7 +67,7 @@ Set on tasks created by Canvas or Gradescope sync. See "Assignment sync" in DESI
 | Field           | Type / constraint                                                        |
 | --------------- | ------------------------------------------------------------------------ |
 | `kind`          | `"canvas"` or `"gradescope"`                                             |
-| `externalId`    | Stable upstream key, unique across all tasks (aliases included)          |
+| `externalId`    | Stable upstream key starting with `kind:`, unique across all tasks (aliases included) |
 | `aliases`       | Keys of the same assignment from the other source                        |
 | `url`           | An `https` address, or `""`                                              |
 | `dueAt`         | Exact upstream deadline (ISO-8601), or `null`                            |

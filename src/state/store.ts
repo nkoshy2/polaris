@@ -8,8 +8,9 @@ import * as sync from '../domain/sync';
 import type { SyncBatch, SyncOptions, SyncSummary } from '../domain/sync';
 import * as ops from '../domain/tasks';
 import type { Ctx, TaskInput } from '../domain/tasks';
-import { emptyData, type AppData, type Task } from '../domain/types';
+import { emptyData, type AppData, type SourceKind, type Task } from '../domain/types';
 import { Repository, StorageError, type KeyValueStore, type LoadStatus } from '../storage/repository';
+import { describeSummary, type SourceStatus } from './connector';
 
 const UNDO_LIMIT = 50;
 
@@ -29,6 +30,8 @@ export interface StoreState {
   undo: UndoEntry[];
   /** Incremented when another tab changed the data. */
   externalChange: number;
+  /** The Polaris Connector extension, as reported by it. Not persisted. */
+  connector: { version: string | null; sources: Partial<Record<SourceKind, SourceStatus>> };
 }
 
 type Listener = () => void;
@@ -61,6 +64,7 @@ export class Store {
       saveError: loadError,
       undo: [],
       externalChange: 0,
+      connector: { version: null, sources: {} },
     };
     // Persist repairs straight away so they are not re-reported on every start.
     if (loaded.status === 'repaired' || loaded.status === 'restoredPrevious') this.persist(loaded.data);
@@ -164,7 +168,7 @@ export class Store {
   };
 
   deleteTasks = (ids: string[]) => {
-    this.commit(ids.length === 1 ? 'Delete task' : `Delete ${ids.length} tasks`, ops.deleteTasks(this.state.data, ids));
+    this.commit(ids.length === 1 ? 'Delete task' : `Delete ${ids.length} tasks`, ops.deleteTasks(this.state.data, ids, this.ctx));
   };
 
   duplicateTask = (id: string): Task => {
@@ -199,11 +203,22 @@ export class Store {
   applySync = (batch: SyncBatch, options?: SyncOptions): SyncSummary => {
     const { data, summary } = sync.applySync(this.state.data, batch, this.ctx, options);
     this.commit(`Sync ${batch.kind === 'canvas' ? 'Canvas' : 'Gradescope'}`, data);
+    this.setSourceStatus(batch.kind, { at: this.ctx.now(), ok: true, message: describeSummary(summary) });
     return summary;
   };
 
-  restoreDismissed = (keys: string[]) => {
-    this.commit('Restore dismissed assignments', sync.restoreDismissed(this.state.data, keys));
+  connectorHello = (version: string) => {
+    if (version !== this.state.connector.version) this.set({ connector: { ...this.state.connector, version } });
+  };
+
+  setSourceStatus = (kind: SourceKind, status: SourceStatus) => {
+    const { connector } = this.state;
+    this.set({ connector: { ...connector, sources: { ...connector.sources, [kind]: status } } });
+  };
+
+  /** Lets sync add these deleted assignments again (pass none to restore all). */
+  restoreDismissed = (keys?: string[]) => {
+    this.commit('Restore deleted assignments', sync.restoreDismissed(this.state.data, keys));
   };
 
   // ---- backup -----------------------------------------------------------------

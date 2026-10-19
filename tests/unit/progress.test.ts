@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { addDays } from '../../src/domain/dates';
 import { stepProgress, summarize } from '../../src/domain/progress';
 import { completeTasks, createTask, deleteTasks, reopenTasks, setStepDone } from '../../src/domain/tasks';
-import { seed } from './helpers';
+import { seed, testCtx } from './helpers';
 
 const TODAY = '2026-10-18';
 const d = (n: number) => addDays(TODAY, n);
@@ -55,7 +55,7 @@ describe('summary counts tasks, never steps', () => {
     expect(summarize(cur.tasks, TODAY)).toMatchObject({ total: 3, completed: 1, percentComplete: 33 });
     cur = reopenTasks(cur, [tasks[0]!.id], ctx);
     expect(summarize(cur.tasks, TODAY)).toMatchObject({ total: 3, completed: 0 });
-    cur = deleteTasks(cur, [tasks[1]!.id]);
+    cur = deleteTasks(cur, [tasks[1]!.id], testCtx());
     expect(summarize(cur.tasks, TODAY)).toMatchObject({ total: 2, open: 2 });
   });
 

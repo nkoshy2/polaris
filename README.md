@@ -16,6 +16,9 @@ no accounts, no server, and your tasks never leave your device.
   importance, creation date or title.
 - **Bulk actions:** complete, reopen, tag or delete several tasks at once.
 - **Undo** for every change, from the toast, the header button, or Ctrl+Z.
+- **Canvas and Gradescope:** with the optional Polaris Connector Chrome extension, assignments become tasks tagged by
+  course, follow upstream changes you haven't overridden, and complete when you submit. Deleted assignments stay
+  deleted.
 - **Backup and restore:** export to a documented JSON file and restore from it, with a preview before anything is
   replaced.
 - **Data safety:** repairs damaged data instead of discarding it, keeps a previous good copy, saves a recovery copy of
@@ -75,7 +78,8 @@ docs/          DESIGN.md (rules and tradeoffs), DATA_FORMAT.md (backup format)
 
 ## Privacy and dependencies
 
-Polaris makes no network requests and has no analytics. Its only runtime dependency is
+Polaris makes no network requests and has no analytics. The optional Polaris Connector extension reads Canvas and
+Gradescope with your existing sign-in and passes assignments to the Polaris tab; nothing is sent anywhere else. Its only runtime dependency is
 [Preact](https://preactjs.com). The development tools are Vite, TypeScript, Vitest, Playwright and axe-core.
 
 ## Known limitations

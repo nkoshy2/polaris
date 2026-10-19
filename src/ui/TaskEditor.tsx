@@ -1,8 +1,10 @@
 import { useMemo, useRef, useState } from 'preact/hooks';
 import { addDays } from '../domain/dates';
+import { linkedKinds } from '../domain/sync';
 import { NotFoundError, type TaskInput } from '../domain/tasks';
 import type { Importance, Task } from '../domain/types';
 import { LIMITS, ValidationError } from '../domain/validation';
+import { SOURCE_NAMES } from '../state/connector';
 import { useStore, useStoreState } from '../state/context';
 import { Dialog } from './Dialog';
 import { Icon } from './Icon';
@@ -179,6 +181,7 @@ export function TaskEditor({ task, draft, onClose }: Props) {
           </p>
         )}
         {readOnly && <p class="form-error">Editing is disabled while Polaris is in read-only mode.</p>}
+        {task?.source && <SourceBox task={task} />}
 
         <div class="field">
           <label for="task-title">Title</label>
@@ -429,5 +432,39 @@ export function TaskEditor({ task, draft, onClose }: Props) {
         </div>
       </form>
     </Dialog>
+  );
+}
+
+const formatDeadline = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+/** Explains what assignment sync does with this task, with a link back to the assignment. */
+function SourceBox({ task }: { task: Task }) {
+  const source = task.source!;
+  const name = SOURCE_NAMES[source.kind];
+  const from = linkedKinds(source).map((k) => SOURCE_NAMES[k]).join(' and ');
+  return (
+    <section class="source-box" aria-labelledby="source-h">
+      <h3 id="source-h">
+        <Icon name="link" /> Assignment from {from}
+      </h3>
+      {source.removedAt && (
+        <p class="source-removed">
+          This assignment is no longer listed in {name}. Polaris kept the task; delete it if you don't need it.
+        </p>
+      )}
+      {source.dueAt && <p>Deadline in {name}: {formatDeadline(source.dueAt)}</p>}
+      <p class="hint">
+        Sync updates the title and due date unless you change them, and completes the task when you submit. Deleted
+        assignments aren't added again.
+      </p>
+      {source.url && (
+        <a class="button small" href={source.url} target="_blank" rel="noopener noreferrer">
+          Open in {name}
+          <Icon name="external" size={14} />
+          <span class="sr-only"> (opens in a new tab)</span>
+        </a>
+      )}
+    </section>
   );
 }

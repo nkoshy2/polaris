@@ -2,6 +2,8 @@ import { useState } from 'preact/hooks';
 import { formatDate, localDate } from '../domain/dates';
 import { dueDescription, urgencyOf } from '../domain/priority';
 import { stepProgress } from '../domain/progress';
+import { linkedKinds } from '../domain/sync';
+import { SOURCE_NAMES } from '../state/connector';
 import type { Tag, Task } from '../domain/types';
 import { Icon } from './Icon';
 
@@ -84,6 +86,16 @@ export function TaskItem(props: TaskItemProps) {
                   </span>
                   <span class="sr-only">{showSteps ? ', hide' : ', show'}</span>
                 </button>
+              </li>
+            )}
+            {task.source && (
+              <li class={`meta meta-source${task.source.removedAt ? ' is-removed' : ''}`}>
+                <Icon name="link" size={14} />
+                <span>
+                  {task.source.removedAt
+                    ? `No longer listed in ${SOURCE_NAMES[task.source.kind]}`
+                    : `From ${linkedKinds(task.source).map((k) => SOURCE_NAMES[k]).join(' and ')}`}
+                </span>
               </li>
             )}
             {tags.map((tag) => (
