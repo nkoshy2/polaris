@@ -4,6 +4,8 @@
  * actions; all task rules stay in src/domain.
  */
 import { localDate } from '../domain/dates';
+import * as sync from '../domain/sync';
+import type { SyncBatch, SyncOptions, SyncSummary } from '../domain/sync';
 import * as ops from '../domain/tasks';
 import type { Ctx, TaskInput } from '../domain/tasks';
 import { emptyData, type AppData, type Task } from '../domain/types';
@@ -189,6 +191,19 @@ export class Store {
 
   deleteTag = (id: string) => {
     this.commit('Delete tag', ops.deleteTag(this.state.data, id, this.ctx));
+  };
+
+  // ---- assignment sync --------------------------------------------------------
+
+  /** Merges one batch from the extension. The whole sync is a single undo step. */
+  applySync = (batch: SyncBatch, options?: SyncOptions): SyncSummary => {
+    const { data, summary } = sync.applySync(this.state.data, batch, this.ctx, options);
+    this.commit(`Sync ${batch.kind === 'canvas' ? 'Canvas' : 'Gradescope'}`, data);
+    return summary;
+  };
+
+  restoreDismissed = (keys: string[]) => {
+    this.commit('Restore dismissed assignments', sync.restoreDismissed(this.state.data, keys));
   };
 
   // ---- backup -----------------------------------------------------------------

@@ -19,7 +19,7 @@ test('export a backup and restore it, with undo', async ({ app: page }, testInfo
   const file = testInfo.outputPath('backup.json');
   await download.saveAs(file);
   const json = JSON.parse(await readFile(file, 'utf8'));
-  expect(json).toMatchObject({ app: 'polaris', schemaVersion: 1 });
+  expect(json).toMatchObject({ app: 'polaris', schemaVersion: 2 });
   expect(json.data.tasks.map((t: { title: string }) => t.title)).toEqual(['Backed up task']);
   await page.keyboard.press('Escape');
 

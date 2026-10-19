@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { KEYS } from '../../src/storage/repository';
-import { serialize } from '../../src/storage/schema';
+import { emptyData } from '../../src/domain/types';
+import { SCHEMA_VERSION, serialize } from '../../src/storage/schema';
 import { Store } from '../../src/state/store';
 import { MemoryStore, testCtx } from './helpers';
 
@@ -68,7 +69,7 @@ describe('store', () => {
 
   it('refuses edits when the stored data is from a newer version', () => {
     const kv = new MemoryStore();
-    const future = serialize({ tasks: [], tags: [] }, '2026-10-18T00:00:00Z').replace('"schemaVersion":1', '"schemaVersion":99');
+    const future = serialize(emptyData(), '2026-10-18T00:00:00Z').replace(`"schemaVersion":${SCHEMA_VERSION}`, '"schemaVersion":99');
     kv.setItem(KEYS.data, future);
     const { store } = make(kv);
     expect(store.getState()).toMatchObject({ readOnly: true, loadStatus: 'newerVersion' });
@@ -89,7 +90,7 @@ describe('store', () => {
   it('replaces all data on restore, and the restore can be undone', () => {
     const { store } = make();
     store.createTask({ title: 'Mine' });
-    store.replaceAll({ tasks: [], tags: [] });
+    store.replaceAll(emptyData());
     expect(store.getState().data.tasks).toHaveLength(0);
     expect(store.undo()).toBe('Restore backup');
     expect(store.getState().data.tasks.map((t) => t.title)).toEqual(['Mine']);

@@ -116,7 +116,7 @@ const hasOpenSteps = (steps: Step[]) => steps.some((s) => !s.done);
 export function createTask(data: AppData, input: TaskInput, ctx: Ctx): { data: AppData; task: Task } {
   const fields = validateTaskInput(data, input, ctx);
   const now = ctx.now();
-  const task: Task = { id: ctx.newId(), ...fields, completedAt: null, createdAt: now, updatedAt: now };
+  const task: Task = { id: ctx.newId(), ...fields, completedAt: null, source: null, createdAt: now, updatedAt: now };
   return { data: { ...data, tasks: [...data.tasks, task] }, task };
 }
 
@@ -160,12 +160,18 @@ export function setStepDone(data: AppData, taskId: string, stepId: string, done:
   return replaceTask(data, { ...task, steps, completedAt, updatedAt: ctx.now() });
 }
 
+/** Deleting a synced task dismisses its upstream keys so sync never re-creates it. */
 export function deleteTasks(data: AppData, ids: string[]): AppData {
   const targets = new Set(ids);
-  return { ...data, tasks: data.tasks.filter((t) => !targets.has(t.id)) };
+  const dismissed = new Set(data.dismissedSources);
+  for (const t of data.tasks) {
+    if (targets.has(t.id) && t.source) [t.source.externalId, ...t.source.aliases].forEach((key) => dismissed.add(key));
+  }
+  const dismissedSources = dismissed.size === data.dismissedSources.length ? data.dismissedSources : [...dismissed];
+  return { ...data, tasks: data.tasks.filter((t) => !targets.has(t.id)), dismissedSources };
 }
 
-/** Copies a task as a new open task with all steps reset. */
+/** Copies a task as a new open task with all steps reset. The copy is never linked to an assignment. */
 export function duplicateTask(data: AppData, id: string, ctx: Ctx): { data: AppData; task: Task } {
   const src = getTask(data, id);
   const now = ctx.now();
@@ -178,6 +184,7 @@ export function duplicateTask(data: AppData, id: string, ctx: Ctx): { data: AppD
     tagIds: [...src.tagIds],
     steps: src.steps.map((s) => ({ id: ctx.newId(), title: s.title, done: false })),
     completedAt: null,
+    source: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -229,6 +236,7 @@ export function deleteTag(data: AppData, id: string, ctx: Ctx): AppData {
   if (!data.tags.some((t) => t.id === id)) throw new NotFoundError('That tag');
   const now = ctx.now();
   return {
+    ...data,
     tags: data.tags.filter((t) => t.id !== id),
     tasks: data.tasks.map((t) =>
       t.tagIds.includes(id) ? { ...t, tagIds: t.tagIds.filter((x) => x !== id), updatedAt: now } : t,

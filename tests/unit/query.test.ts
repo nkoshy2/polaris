@@ -144,7 +144,7 @@ describe('large collections', () => {
     // Build directly for speed; createTask is exercised elsewhere.
     const base = createTask(data, { title: 'seed' }, ctx).task;
     data = {
-      tags: [],
+      ...data,
       tasks: Array.from({ length: 10_000 }, (_, i) => ({
         ...base,
         id: `t${i}`,

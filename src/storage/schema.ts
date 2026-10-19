@@ -2,18 +2,28 @@
  * Stored/exported file format, schema migrations, and defensive loading.
  *
  * Envelope (documented in docs/DATA_FORMAT.md):
- *   { "app": "polaris", "schemaVersion": 1, "savedAt": ISO, "data": { tasks, tags } }
+ *   { "app": "polaris", "schemaVersion": 2, "savedAt": ISO, "data": { tasks, tags, dismissedSources } }
  *
  * Loading never throws away a recognisable record: malformed fields are
  * repaired to safe defaults and every repair is reported as an issue so the
  * caller can keep a copy of the original and tell the user.
  */
 import { isValidDate } from '../domain/dates';
-import { IMPORTANCE_LEVELS, type AppData, type Importance, type Step, type Tag, type Task } from '../domain/types';
+import {
+  IMPORTANCE_LEVELS,
+  SOURCE_KINDS,
+  type AppData,
+  type Importance,
+  type SourceKind,
+  type Step,
+  type Tag,
+  type Task,
+  type TaskSource,
+} from '../domain/types';
 import { LIMITS, cleanLine } from '../domain/validation';
 
 export const APP_ID = 'polaris';
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export interface Envelope {
   app: typeof APP_ID;
@@ -38,7 +48,14 @@ export class SchemaError extends Error {
  * SCHEMA_VERSION is bumped; migrations must be pure and never drop records.
  */
 export type Migration = (data: unknown) => unknown;
-export const MIGRATIONS: Record<number, Migration> = {};
+export const MIGRATIONS: Record<number, Migration> = {
+  // 1 → 2: assignment sync. Existing tasks were made by the user, so none has a source.
+  1: (data) => {
+    if (!isObject(data)) return data;
+    const tasks = Array.isArray(data.tasks) ? data.tasks.map((t) => (isObject(t) ? { ...t, source: null } : t)) : data.tasks;
+    return { ...data, tasks, dismissedSources: [] };
+  },
+};
 
 export function migrate(
   data: unknown,
@@ -142,6 +159,7 @@ export function normalizeData(input: unknown, now: string, newId: () => string):
 
   const tasks: Task[] = [];
   const taskIds = new Set<string>();
+  const sourceKeys = new Set<string>();
   rawTasks.forEach((t, i) => {
     if (!isObject(t)) {
       issues.push(`Skipped task #${i + 1}: not a task record.`);
@@ -214,6 +232,8 @@ export function normalizeData(input: unknown, now: string, newId: () => string):
       issues.push(`Task ${label} was completed but had open steps; marked those steps done.`);
     }
 
+    const source = normalizeSource(t.source, label, sourceKeys, issues);
+
     tasks.push({
       id,
       title,
@@ -223,10 +243,68 @@ export function normalizeData(input: unknown, now: string, newId: () => string):
       tagIds: taskTagIds,
       steps,
       completedAt,
+      source,
       createdAt: isIsoTimestamp(t.createdAt) ? t.createdAt : now,
       updatedAt: isIsoTimestamp(t.updatedAt) ? t.updatedAt : now,
     });
   });
 
-  return { data: { tasks, tags }, issues };
+  const dismissedSources: string[] = [];
+  if (Array.isArray(input.dismissedSources)) {
+    for (const key of input.dismissedSources) {
+      if (typeof key === 'string' && key && !dismissedSources.includes(key)) dismissedSources.push(key);
+    }
+  } else if (input.dismissedSources != null) {
+    issues.push('The list of dismissed assignments was unreadable; started an empty one.');
+  }
+
+  return { data: { tasks, tags, dismissedSources }, issues };
+}
+
+const isHttpsUrl = (v: unknown): v is string => {
+  if (typeof v !== 'string') return false;
+  try {
+    return new URL(v).protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Repairs a task's assignment link. A link without a usable kind or key, or one
+ * whose key another task already uses, is removed: the task stays, but sync
+ * treats it as a task the user made.
+ */
+function normalizeSource(raw: unknown, label: string, seen: Set<string>, issues: string[]): TaskSource | null {
+  if (raw == null) return null;
+  const kind = isObject(raw) ? raw.kind : undefined;
+  const externalId = isObject(raw) && typeof raw.externalId === 'string' ? raw.externalId : '';
+  if (!isObject(raw) || !SOURCE_KINDS.includes(kind as SourceKind) || !externalId) {
+    issues.push(`Task ${label} had an unreadable assignment link; kept the task without it.`);
+    return null;
+  }
+  if (seen.has(externalId)) {
+    issues.push(`Task ${label} was linked to the same assignment as another task; kept the task without the link.`);
+    return null;
+  }
+  const aliases = Array.isArray(raw.aliases)
+    ? [...new Set(raw.aliases.filter((a): a is string => typeof a === 'string' && !!a && a !== externalId && !seen.has(a)))]
+    : [];
+  [externalId, ...aliases].forEach((key) => seen.add(key));
+  if (raw.url != null && raw.url !== '' && !isHttpsUrl(raw.url)) {
+    issues.push(`Task ${label} had an invalid assignment address; removed it.`);
+  }
+  return {
+    kind: kind as SourceKind,
+    externalId,
+    aliases,
+    url: isHttpsUrl(raw.url) ? raw.url : '',
+    dueAt: isIsoTimestamp(raw.dueAt) ? raw.dueAt : null,
+    syncedTitle: typeof raw.syncedTitle === 'string' ? raw.syncedTitle : '',
+    syncedDue: isValidDate(raw.syncedDue) ? raw.syncedDue : null,
+    submittedKeys: Array.isArray(raw.submittedKeys)
+      ? [...new Set(raw.submittedKeys.filter((k): k is string => k === externalId || aliases.includes(k as string)))]
+      : [],
+    removedAt: isIsoTimestamp(raw.removedAt) ? raw.removedAt : null,
+  };
 }
