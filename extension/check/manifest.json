@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Polaris Connector (feasibility check)",
+  "version": "0.0.1",
+  "description": "Checks whether Canvas and Gradescope can be read with your existing sign-in. Sends nothing anywhere.",
+  "host_permissions": ["https://canvas.illinois.edu/*", "https://www.gradescope.com/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Run Polaris feasibility check"
+  }
+}
