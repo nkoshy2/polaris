@@ -7,6 +7,7 @@ interface Item {
   submitted?: boolean;
   kind?: 'canvas' | 'gradescope';
   course?: string;
+  dueAt?: string;
 }
 
 /** Posts a message the way the extension's content script does. Deadlines are 11:59 PM local on Oct 24. */
@@ -69,6 +70,30 @@ test('a submission completes the task, and the same assignment in Gradescope is 
   await expect(row(page, 'Homework 5')).toHaveCount(1);
   await expect(row(page, 'Homework 5')).toContainText('From Canvas and Gradescope');
   await expect(row(page, 'Homework 5')).toContainText('Completed');
+});
+
+test('saving an editor opened before a sync keeps the synced title and due date', async ({ app: page }) => {
+  await sendBatch(page, 'canvas', [hw]);
+  await goToAllTasks(page);
+  await row(page, 'Homework 5').getByRole('button', { name: 'Homework 5' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Edit task' });
+  await dialog.getByLabel('Notes').fill('Start early');
+
+  // Upstream renames the assignment and moves its deadline while the editor is open.
+  const oct26 = await page.evaluate(() => new Date(2026, 9, 26, 23, 59).toISOString());
+  await sendBatch(page, 'canvas', [{ ...hw, title: 'Homework 5 (revised)', dueAt: oct26 }]);
+  await expect(dialog.getByLabel('Title', { exact: true })).toHaveValue('Homework 5');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog).toHaveCount(0);
+
+  const r = row(page, 'Homework 5 (revised)');
+  await expect(r).toContainText('Mon, Oct 26');
+  // The save didn't count as a user edit: sync still updates both fields.
+  const oct28 = await page.evaluate(() => new Date(2026, 9, 28, 23, 59).toISOString());
+  await sendBatch(page, 'canvas', [{ ...hw, title: 'Homework 5 (final)', dueAt: oct28 }]);
+  await expect(row(page, 'Homework 5 (final)')).toContainText('Wed, Oct 28');
+  await row(page, 'Homework 5 (final)').getByRole('button', { name: 'Homework 5 (final)' }).click();
+  await expect(page.getByRole('dialog', { name: 'Edit task' }).getByLabel('Notes')).toHaveValue('Start early');
 });
 
 test('a deleted assignment is not added again until it is allowed again', async ({ app: page }) => {

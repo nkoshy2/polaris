@@ -7,7 +7,8 @@
  *  - Title and due date follow upstream changes unless the user edited them.
  *  - Becoming submitted upstream completes the task (once per submission).
  *  - An assignment missing upstream is flagged, never deleted.
- *  - Assignments the user deleted (dismissed) are never re-created.
+ *  - Assignments the user deleted (dismissed) are never re-created, including
+ *    the other source's copy of the same assignment.
  *  - The same assignment in Canvas and Gradescope becomes one task.
  */
 import { isValidDate, localDate } from './dates';
@@ -154,7 +155,9 @@ export function applySync(
   const autoComplete = options.autoComplete ?? true;
   const now = ctx.now();
   const summary: SyncSummary = { added: 0, updated: 0, completed: 0, removed: 0 };
-  const dismissed = new Set(data.dismissedSources.flatMap((d) => d.keys));
+  const dismissedSources = [...data.dismissedSources];
+  const dismissed = new Set(dismissedSources.flatMap((d) => d.keys));
+  let dismissedChanged = false;
 
   const tasks = [...data.tasks];
   const tags: Tag[] = [...data.tags];
@@ -184,6 +187,27 @@ export function applySync(
     });
   };
 
+  /**
+   * A deleted task from the other source that matches the item the way
+   * `findDuplicate` matches live tasks. Its keys gain the item's, so the match
+   * survives later renames and "restore" brings back both.
+   */
+  const dismissedDuplicate = (item: ExternalItem, due: string | null): boolean => {
+    const tag = courseTag(item.course).toLocaleLowerCase();
+    const key = titleKey(item.title);
+    const i = dismissedSources.findIndex((d) => {
+      if (d.syncedTitle === undefined || d.syncedDue === undefined || !d.tagNames) return false;
+      if (d.keys.some((k) => k.startsWith(`${item.kind}:`))) return false;
+      const sameCourse = d.tagNames.some((name) => name.toLocaleLowerCase() === tag);
+      return sameCourse && titleKey(d.syncedTitle) === key && d.syncedDue === due;
+    });
+    if (i < 0) return false;
+    dismissedSources[i] = { ...dismissedSources[i]!, keys: [...dismissedSources[i]!.keys, item.externalId] };
+    dismissed.add(item.externalId);
+    dismissedChanged = true;
+    return true;
+  };
+
   const complete = (t: Task): Task => ({
     ...t,
     completedAt: now,
@@ -198,6 +222,7 @@ export function applySync(
 
     if (index === undefined) {
       const dup = findDuplicate(item, due);
+      if (dup < 0 && dismissedDuplicate(item, due)) continue;
       if (dup < 0) {
         const tagId = tagFor(item.course);
         let task: Task = {
@@ -284,7 +309,8 @@ export function applySync(
   }
 
   const changed = summary.added + summary.updated + summary.removed > 0;
-  return { data: changed ? { ...data, tasks, tags } : data, summary };
+  if (!changed && !dismissedChanged) return { data, summary };
+  return { data: { ...data, ...(changed ? { tasks, tags } : {}), ...(dismissedChanged ? { dismissedSources } : {}) }, summary };
 }
 
 /** Which sources a linked task came from: its own kind first, then its aliases' kinds. */

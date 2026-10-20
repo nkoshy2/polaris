@@ -100,7 +100,7 @@ allow personal access tokens) and hands them to the Polaris tab. The merge rules
 | Title or deadline changed                  | Updated, unless the user edited that field since the last sync       |
 | Submitted                                  | The task is completed (with its steps), once per submission          |
 | Missing from a complete fetch              | `removedAt` is set; the task is never deleted                        |
-| An assignment the user deleted             | Never re-created; listed in `dismissedSources` until allowed again   |
+| An assignment the user deleted             | Never re-created, nor its other-source copy; listed in `dismissedSources` until allowed again |
 | Same assignment in Canvas and Gradescope   | One task; the second source is linked as an alias                    |
 
 - **Course tags.** The tag is "DEPT number" when the course name contains one, so Canvas's
@@ -117,6 +117,17 @@ allow personal access tokens) and hands them to the Polaris tab. The merge rules
 - **Duplicates.** A Gradescope assignment links to a Canvas task (and vice versa) when the course tag, the title
   (ignoring case, spaces and punctuation) and the due date match. The first source to report the assignment owns
   its title, due date and link; the alias only reports submission.
+- **Deleted assignments.** Deleting a synced task adds its keys to `dismissedSources`, along with its tag names,
+  synced title and synced due date. An assignment from the other source that matches an entry the way duplicates
+  are linked is dismissed too, and its key joins the entry, so deleting a Canvas task also keeps its Gradescope copy
+  away even if the two were never linked. Entries saved before these fields existed match by key only.
+- **Stale editor saves.** The editor keeps the values it opened with. On save, a title or due date the user didn't
+  change in the form keeps the task's current value, so a sync that arrived while the editor was open isn't
+  overwritten and then mistaken for a user edit.
+- **Gradescope keys.** A Gradescope row is keyed by its assignment ID, taken from the name cell or, failing that,
+  any `data-assignment-id` or link to the course's assignment in the row. Rows with no ID anywhere (usually closed
+  or not yet open, with no submission) fall back to course plus title, so renaming one upstream creates a new task
+  and flags the old one (see the extension's README).
 - **Removed upstream.** A batch can say which deadline window it fetched completely. Only linked tasks with a
   deadline inside that window can be flagged, so a narrower fetch never flags assignments outside it.
 - **Undo.** Each sync is one undo step. A sync that changes nothing records no step.

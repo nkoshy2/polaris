@@ -136,6 +136,20 @@ describe('Gradescope course page', () => {
     expect(rows[3]!.externalId).toBe('gradescope:course:1366944:midterm-in-class');
   });
 
+  it('takes an assignment ID from another cell when the name cell has none', () => {
+    const row = (cells: string) => `
+<table id="assignments-student-table"><tbody>
+  <tr role="row"><th class="table--primaryLink" role="rowheader" scope="row">Quiz 2</th>${cells}</tr>
+</tbody></table>`;
+    const fromData = row('<td><div class="submissionStatus" data-assignment-id="7010">No Submission</div></td>');
+    expect(parseCoursePage(fromData, '1366944')[0]!.externalId).toBe('gradescope:assignment:7010');
+    const fromLink = row('<td><a href="/courses/1366944/assignments/7011/submissions/new">Submit</a></td>');
+    expect(parseCoursePage(fromLink, '1366944')[0]!.externalId).toBe('gradescope:assignment:7011');
+    // A link to another course's assignment is not this row's ID.
+    const otherCourse = row('<td><a href="/courses/42/assignments/9/submissions/1">Related</a></td>');
+    expect(parseCoursePage(otherCourse, '1366944')[0]!.externalId).toBe('gradescope:course:1366944:quiz-2');
+  });
+
   it('parses Gradescope dates and text', () => {
     expect(parseGradescopeDate('2026-09-04 14:00:00 -0500')).toBe('2026-09-04T19:00:00.000Z');
     expect(parseGradescopeDate('not a date')).toBeNull();

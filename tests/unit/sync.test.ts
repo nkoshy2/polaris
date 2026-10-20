@@ -219,7 +219,16 @@ describe('deleted and removed assignments', () => {
     const ctx = testCtx();
     const first = sync(emptyData(), [canvas()], ctx).data;
     const deleted = deleteTasks(first, [only(first).id], ctx);
-    expect(deleted.dismissedSources).toEqual([{ keys: [canvas().externalId], title: 'Homework 5', dismissedAt: ctx.now() }]);
+    expect(deleted.dismissedSources).toEqual([
+      {
+        keys: [canvas().externalId],
+        title: 'Homework 5',
+        dismissedAt: ctx.now(),
+        tagNames: ['AE 370'],
+        syncedTitle: 'Homework 5',
+        syncedDue: '2026-10-24',
+      },
+    ]);
     expect(sync(deleted, [canvas()], ctx).data.tasks).toHaveLength(0);
 
     const restored = restoreDismissed(deleted, [canvas().externalId]);
@@ -288,6 +297,46 @@ describe('the same assignment in Canvas and Gradescope', () => {
     expect(deleted.dismissedSources.map((d) => d.keys)).toEqual([[canvas().externalId, gradescope().externalId]]);
     expect(sync(deleted, [gradescope()], ctx).data.tasks).toHaveLength(0);
   });
+
+  it('does not bring back a deleted task through the other source’s unlinked copy', () => {
+    const ctx = testCtx();
+    const fromCanvas = sync(emptyData(), [canvas()], ctx).data;
+    // Renamed by the user before deleting: matching uses the synced title, like linking does.
+    const t = only(fromCanvas);
+    const renamed = updateTask(fromCanvas, t.id, { title: 'HW5 (mine)', due: t.due, tagIds: t.tagIds }, ctx);
+    const deleted = deleteTasks(renamed, [only(renamed).id], ctx);
+
+    const { data, summary } = sync(deleted, [gradescope({ title: 'homework 5' })], ctx);
+    expect(data.tasks).toHaveLength(0);
+    expect(summary).toEqual({ added: 0, updated: 0, completed: 0, removed: 0 });
+    // The entry now holds the Gradescope key too, so later renames upstream still match it.
+    expect(data.dismissedSources[0]!.keys).toEqual([canvas().externalId, gradescope().externalId]);
+    expect(sync(data, [gradescope({ title: 'Homework 5 (updated)' })], ctx).data).toBe(data);
+
+    // Restoring brings back both copies.
+    const restored = restoreDismissed(data, data.dismissedSources[0]!.keys);
+    expect(sync(restored, [gradescope()], ctx).data.tasks).toHaveLength(1);
+  });
+
+  it('still adds the other source’s assignment when the course, title or due date differs', () => {
+    const ctx = testCtx();
+    const first = sync(emptyData(), [canvas()], ctx).data;
+    const deleted = deleteTasks(first, [only(first).id], ctx);
+    expect(sync(deleted, [gradescope({ dueAt: local(2026, 10, 25) })], ctx).data.tasks).toHaveLength(1);
+    expect(sync(deleted, [gradescope({ title: 'Homework 6' })], ctx).data.tasks).toHaveLength(1);
+    expect(sync(deleted, [gradescope({ course: 'AE 312' })], ctx).data.tasks).toHaveLength(1);
+    // Nor does a deleted Canvas task hide another Canvas assignment with the same title.
+    expect(sync(deleted, [canvas({ externalId: 'canvas:canvas.illinois.edu:assignment:9' })], ctx).data.tasks).toHaveLength(1);
+  });
+
+  it('matches older dismissed entries by key only', () => {
+    const ctx = testCtx();
+    const first = sync(emptyData(), [canvas()], ctx).data;
+    const deleted = deleteTasks(first, [only(first).id], ctx);
+    const old = { ...deleted, dismissedSources: [{ keys: [canvas().externalId], title: 'Homework 5', dismissedAt: ctx.now() }] };
+    expect(sync(old, [canvas()], ctx).data.tasks).toHaveLength(0);
+    expect(sync(old, [gradescope()], ctx).data.tasks).toHaveLength(1);
+  });
 });
 
 describe('storage of synced tasks', () => {
@@ -325,7 +374,13 @@ describe('storage of synced tasks', () => {
       savedAt: NOW,
       data: {
         tags: [],
-        dismissedSources: [{ keys: ['k9'], title: '  Old  HW ' }, { title: 'no keys' }],
+        dismissedSources: [
+          { keys: ['k9'], title: '  Old  HW ' },
+          { title: 'no keys' },
+          { keys: ['k8'], title: 'New', tagNames: [' AE  370 ', 7], syncedTitle: 'HW 5', syncedDue: '2026-10-24' },
+          { keys: ['k7'], title: 'Bad due', tagNames: ['AE 370'], syncedTitle: 'HW 6', syncedDue: 'soon' },
+          { keys: ['k6'], title: 'No due', tagNames: [], syncedTitle: 'HW 7', syncedDue: null },
+        ],
         tasks: [
           { id: 'a', title: 'Linked', source },
           { id: 'b', title: 'Same key', source },
@@ -336,7 +391,12 @@ describe('storage of synced tasks', () => {
     const { data, issues } = parseEnvelope(text, { now: NOW });
     expect(data.tasks.map((t) => t.source?.externalId ?? null)).toEqual(['k1', null, null]);
     expect(data.tasks[0]!.source).toMatchObject({ url: '', submittedKeys: ['k1'] });
-    expect(data.dismissedSources).toEqual([{ keys: ['k9'], title: 'Old HW', dismissedAt: NOW }]);
+    expect(data.dismissedSources).toEqual([
+      { keys: ['k9'], title: 'Old HW', dismissedAt: NOW },
+      { keys: ['k8'], title: 'New', dismissedAt: NOW, tagNames: ['AE 370'], syncedTitle: 'HW 5', syncedDue: '2026-10-24' },
+      { keys: ['k7'], title: 'Bad due', dismissedAt: NOW },
+      { keys: ['k6'], title: 'No due', dismissedAt: NOW, tagNames: [], syncedTitle: 'HW 7', syncedDue: null },
+    ]);
     expect(issues).toHaveLength(4);
   });
 });
