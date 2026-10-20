@@ -43,6 +43,12 @@ Gradescope has no public API, so the extension reads the pages you see when sign
 - Each of those courses' assignment table (`/courses/<id>`), one course at a time. Assignments due from two weeks ago
   to four months ahead are kept. A score or "Submitted" counts as done; "No Submission" doesn't.
 
+Each Gradescope assignment is identified by its assignment ID, read from the row's link or submit button (or any
+other link to the assignment in that row). Some rows have no ID at all: Gradescope shows an assignment that is closed
+without a submission, or not open yet, as plain text. Those are identified by course and title instead, because
+nothing else in the row is stable. If such an assignment is renamed on Gradescope, Polaris adds it again as a new
+task and flags the old one as removed; delete whichever you don't want.
+
 If Gradescope changes its page layout, sync stops with "Gradescope's … looks different than expected" in the Backup
 dialog rather than adding wrong tasks. An assignment in both Canvas and Gradescope (same course, title and due date)
 becomes one task; Canvas syncs first, so its title and link are used.

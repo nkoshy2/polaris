@@ -160,12 +160,23 @@ export function setStepDone(data: AppData, taskId: string, stepId: string, done:
   return replaceTask(data, { ...task, steps, completedAt, updatedAt: ctx.now() });
 }
 
-/** Deleting a synced task dismisses its upstream keys so sync never re-creates it. */
+/**
+ * Deleting a synced task dismisses its upstream keys so sync never re-creates
+ * it. Tags, title and due date are kept too, so the other source's copy of the
+ * assignment is recognised even if it was never linked.
+ */
 export function deleteTasks(data: AppData, ids: string[], ctx: Ctx): AppData {
   const targets = new Set(ids);
   const dismissed: DismissedSource[] = data.tasks
     .filter((t) => targets.has(t.id) && t.source)
-    .map((t) => ({ keys: [t.source!.externalId, ...t.source!.aliases], title: t.title, dismissedAt: ctx.now() }));
+    .map((t) => ({
+      keys: [t.source!.externalId, ...t.source!.aliases],
+      title: t.title,
+      dismissedAt: ctx.now(),
+      tagNames: t.tagIds.flatMap((id) => data.tags.find((g) => g.id === id)?.name ?? []),
+      syncedTitle: t.source!.syncedTitle,
+      syncedDue: t.source!.syncedDue,
+    }));
   return {
     ...data,
     tasks: data.tasks.filter((t) => !targets.has(t.id)),

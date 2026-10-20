@@ -27,7 +27,14 @@ Backups (Export) and browser storage both use the same JSON structure.
       }
     ],
     "dismissedSources": [
-      { "keys": ["canvas:canvas.illinois.edu:assignment:123"], "title": "Homework 4", "dismissedAt": "ISO-8601" }
+      {
+        "keys": ["canvas:canvas.illinois.edu:assignment:123"],
+        "title": "Homework 4",
+        "dismissedAt": "ISO-8601",
+        "tagNames": ["AE 370"],
+        "syncedTitle": "Homework 4",
+        "syncedDue": "2026-10-17"
+      }
     ]
   }
 }
@@ -43,7 +50,7 @@ Backups (Export) and browser storage both use the same JSON structure.
 | `steps`       | Up to 100 steps; `done` is a boolean                                 |
 | `completedAt` | ISO-8601 timestamp, or `null` while open. When set, every step must be done. |
 | `source`      | `null` for tasks the user made, or an assignment link (below)       |
-| `dismissedSources` | Synced tasks the user deleted: their upstream `keys`, `title` and `dismissedAt`. Sync never re-creates a task for any of those keys |
+| `dismissedSources` | Synced tasks the user deleted: their upstream `keys`, `title` and `dismissedAt`. Sync never re-creates a task for any of those keys (see below) |
 | Tag `name`    | 1–40 characters, unique ignoring case                                |
 
 ### Assignment link (`source`)
@@ -74,6 +81,21 @@ Set on tasks created by Canvas or Gradescope sync. See "Assignment sync" in DESI
 | `syncedTitle`, `syncedDue` | Last values received from upstream                            |
 | `submittedKeys` | Keys (`externalId` or an alias) currently reported as submitted          |
 | `removedAt`     | When the assignment stopped appearing upstream, or `null`                |
+
+### Deleted assignments (`dismissedSources`)
+
+| Field           | Type / constraint                                                        |
+| --------------- | ------------------------------------------------------------------------ |
+| `keys`          | The deleted task's `externalId` and aliases; at least one                |
+| `title`         | The task's title when it was deleted, shown under Backup                 |
+| `dismissedAt`   | ISO-8601 timestamp                                                       |
+| `tagNames`      | Optional. The task's tag names when it was deleted (one is its course tag) |
+| `syncedTitle`, `syncedDue` | Optional. The task's last synced title and due date (`"YYYY-MM-DD"` or `null`) |
+
+The optional fields let sync recognise the other source's copy of a deleted assignment that was never linked as an
+alias: it matches the way duplicates are linked (same course tag, title and due date), and its key is then added to
+`keys`. They are kept only when all three are valid. Entries written before they existed, or repaired without them,
+match by key only.
 
 ## Compatibility
 

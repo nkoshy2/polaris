@@ -74,12 +74,24 @@ export interface Tag {
   updatedAt: string;
 }
 
-/** A synced task the user deleted. Sync never re-creates a task for any of its keys. */
+/**
+ * A synced task the user deleted. Sync never re-creates a task for any of its
+ * keys, nor for an assignment from the other source that matches it the way
+ * duplicates are linked (same course tag, title and due date).
+ */
 export interface DismissedSource {
   /** The deleted task's externalId and aliases. */
   keys: string[];
   title: string;
   dismissedAt: string;
+  /**
+   * The deleted task's tag names (one of them is its course tag), last synced
+   * title and last synced due date, for matching the other source's copy.
+   * Missing on entries saved before they were recorded; those match by key only.
+   */
+  tagNames?: string[];
+  syncedTitle?: string;
+  syncedDue?: string | null;
 }
 
 export interface AppData {

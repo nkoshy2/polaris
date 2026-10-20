@@ -82,10 +82,14 @@ export function TaskEditor({ task, draft, onClose }: Props) {
   const toInput = (): TaskInput => {
     const steps = [...form.steps];
     if (newStep.trim()) steps.push({ key: nextKey(), title: newStep, done: false });
+    // Sync may have changed the title or due date since the editor opened.
+    // Fields the user left alone keep the task's current value; writing back
+    // the stale one would look like a user edit and stop sync updating it.
+    const current = task && data.tasks.find((t) => t.id === task.id);
     return {
-      title: form.title,
+      title: current && form.title === initial.title ? current.title : form.title,
       notes: form.notes,
-      due: form.due || null,
+      due: current && form.due === initial.due ? current.due : form.due || null,
       importance: form.importance,
       tagIds: form.tagIds.filter((id) => data.tags.some((t) => t.id === id)),
       steps: steps.map((s) => ({ id: s.id, title: s.title, done: s.done })),
@@ -96,8 +100,9 @@ export function TaskEditor({ task, draft, onClose }: Props) {
     e.preventDefault();
     try {
       if (task) {
-        store.updateTask(task.id, toInput());
-        ui.notify(`Saved “${form.title.trim()}”.`, { undoable: true });
+        const input = toInput();
+        store.updateTask(task.id, input);
+        ui.notify(`Saved “${input.title.trim()}”.`, { undoable: true });
       } else {
         const created = store.createTask(toInput());
         ui.notify(`Added “${created.title}”.`, { undoable: true });

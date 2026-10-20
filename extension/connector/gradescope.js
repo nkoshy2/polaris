@@ -106,6 +106,23 @@ export function currentCourses(courses) {
 
 const titleKey = (title) => title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '');
 
+/**
+ * An assignment ID anywhere else in the row: a data-assignment-id attribute or
+ * a link to this course's assignment. Rows Gradescope renders as plain text
+ * (closed without a submission, or not open yet) usually have neither; those
+ * are keyed by course and title instead (see README, "Gradescope").
+ */
+function rowAssignmentId(row, courseId) {
+  for (const m of row.matchAll(/<[a-z][a-z0-9]*\b[^>]*>/gi)) {
+    const id = attr(m[0], 'data-assignment-id');
+    if (id && /^\d+$/.test(id)) return id;
+    const href = attr(m[0], 'href');
+    const linked = href && /\/courses\/(\d+)\/assignments\/(\d+)/.exec(href);
+    if (linked && linked[1] === String(courseId)) return linked[2];
+  }
+  return null;
+}
+
 /** Assignment rows from a course page's table. */
 export function parseCoursePage(html, courseId) {
   const tableStart = html.search(/id=["']assignments-student-table["']/);
@@ -128,7 +145,9 @@ export function parseCoursePage(html, courseId) {
 
     const href = link ? attr(link, 'href') : null;
     const assignmentId =
-      (button && attr(button, 'data-assignment-id')) || (href && /\/assignments\/(\d+)/.exec(href)?.[1]) || null;
+      (button && attr(button, 'data-assignment-id')) ||
+      (href && /\/assignments\/(\d+)/.exec(href)?.[1]) ||
+      rowAssignmentId(row, courseId);
     const due = tagsWithClass(row, 'submissionTimeChart--dueDate')[0];
     const score = tagsWithClass(row, 'submissionStatus--score')[0];
     const statusEl = tagsWithClass(row, 'submissionStatus--text')[0];

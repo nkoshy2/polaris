@@ -258,11 +258,20 @@ export function normalizeData(input: unknown, now: string, newId: () => string):
         issues.push(`Skipped dismissed assignment #${i + 1}: it had no assignment key.`);
         return;
       }
-      dismissedSources.push({
+      const entry: DismissedSource = {
         keys,
         title: cleanLine(isObject(d) ? d.title : '').slice(0, LIMITS.title) || 'Untitled assignment',
         dismissedAt: isObject(d) && isIsoTimestamp(d.dismissedAt) ? d.dismissedAt : now,
-      });
+      };
+      // Matching fields are optional (older entries lack them) and kept only when
+      // all three are valid: a partial set could never match anyway.
+      const tagNames = isObject(d) && Array.isArray(d.tagNames) ? d.tagNames.map(cleanLine).filter(Boolean) : null;
+      const syncedTitle = isObject(d) ? cleanLine(d.syncedTitle) : '';
+      const syncedDue = isObject(d) ? d.syncedDue : undefined;
+      if (tagNames && syncedTitle && (syncedDue === null || (typeof syncedDue === 'string' && isValidDate(syncedDue)))) {
+        Object.assign(entry, { tagNames, syncedTitle, syncedDue });
+      }
+      dismissedSources.push(entry);
     });
   } else if (input.dismissedSources != null) {
     issues.push('The list of dismissed assignments was unreadable; started an empty one.');
