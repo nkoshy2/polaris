@@ -5,14 +5,21 @@
  * tab. When Polaris isn't open, the page asks for the cached batches when it
  * next loads. Nothing is sent anywhere except to the Polaris tab.
  */
-import { SignedOutError, fetchCanvasBatch } from './canvas.js';
+import { fetchCanvasBatch } from './canvas.js';
+import { fetchGradescopeBatch } from './gradescope.js';
 
 const ALARM = 'sync';
 const PERIOD_MINUTES = 30;
 const POLARIS_URLS = ['https://nkoshy2.github.io/polaris/*', 'http://localhost:5173/*', 'http://localhost:4173/*'];
 
-/** Each source's fetcher. Gradescope is added in the next step. */
-const SOURCES = { canvas: fetchCanvasBatch };
+/**
+ * Each source's fetcher, run in this order. Canvas goes first so that when an
+ * assignment is in both, Canvas creates the task and Gradescope links to it.
+ */
+const SOURCES = { canvas: fetchCanvasBatch, gradescope: fetchGradescopeBatch };
+const NAMES = { canvas: 'Canvas', gradescope: 'Gradescope' };
+/** Errors whose message is already written for the user. */
+const EXPLAINED = ['SignedOutError', 'LayoutError'];
 
 const version = chrome.runtime.getManifest().version;
 let running = null;
@@ -45,8 +52,7 @@ async function syncSource(kind) {
     await deliver({ type: 'batch', batch });
     status = { kind, ok: true, at };
   } catch (error) {
-    const message =
-      error instanceof SignedOutError ? error.message : `Couldn't read ${kind === 'canvas' ? 'Canvas' : kind}: ${error?.message ?? error}`;
+    const message = EXPLAINED.includes(error?.name) ? error.message : `Couldn't read ${NAMES[kind]}: ${error?.message ?? error}`;
     status = { kind, ok: false, at, message };
   }
   const { statuses } = await readCache();
@@ -55,9 +61,11 @@ async function syncSource(kind) {
   if (!status.ok) await deliver({ type: 'status', ...status });
 }
 
-/** Runs one sync of every source; concurrent requests share the run in progress. */
+/** Runs one sync of every source, in order; concurrent requests share the run in progress. */
 function syncAll() {
-  running ??= Promise.all(Object.keys(SOURCES).map(syncSource)).finally(() => {
+  running ??= (async () => {
+    for (const kind of Object.keys(SOURCES)) await syncSource(kind);
+  })().finally(() => {
     running = null;
   });
   return running;
