@@ -37,6 +37,12 @@ export interface SyncBatch {
   kind: SourceKind;
   items: ExternalItem[];
   window?: { start: string; end: string };
+  /**
+   * When the extension fetched this batch (ISO-8601). A batch replayed from the
+   * extension's cache can be hours old, so this, not the time it arrived, is
+   * the sync time shown to the user.
+   */
+  fetchedAt?: string;
 }
 
 export interface SyncOptions {
@@ -103,7 +109,8 @@ export function parseSyncBatch(raw: unknown): { batch: SyncBatch; rejected: stri
   if (raw.items.length > LIMIT_BATCH_ITEMS) rejected.push(`Only the first ${LIMIT_BATCH_ITEMS} items were read.`);
   const w = raw.window;
   const window = isObject(w) && isIsoTimestamp(w.start) && isIsoTimestamp(w.end) ? { start: w.start, end: w.end } : undefined;
-  return { batch: { kind, items, ...(window ? { window } : {}) }, rejected };
+  const fetchedAt = isIsoTimestamp(raw.fetchedAt) ? new Date(raw.fetchedAt).toISOString() : undefined;
+  return { batch: { kind, items, ...(window ? { window } : {}), ...(fetchedAt ? { fetchedAt } : {}) }, rejected };
 }
 
 /**

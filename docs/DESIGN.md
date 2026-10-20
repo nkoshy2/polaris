@@ -123,6 +123,15 @@ allow personal access tokens) and hands them to the Polaris tab. The merge rules
 - **Extension messages.** The extension's content script and the page use `window.postMessage` on the page's own
   origin (protocol in `src/state/connector.ts`). Polaris accepts only messages from its own window and origin, and
   validates every batch with `parseSyncBatch`. Sync status is kept in memory and shown under Backup.
+- **Sync times.** The extension stamps each batch with `fetchedAt`, the time it was fetched. When Polaris loads, the
+  extension replays its cached batches, which can be hours old, so the status shows `fetchedAt` (never later than
+  now) rather than the time the batch arrived. A batch without it counts as fetched now. A status older than the one
+  already shown is ignored: on load the cached failure arrives before the cached batch from the sync before it, and
+  the failure must win.
+- **Failures are visible.** While any source's latest status is a failure (for example "Not signed in to
+  Gradescope."), a notice under the header says so in words, with the extension's message and an *Open Backup*
+  button. It is `role="status"`, so it doesn't interrupt, and it disappears when that source next syncs successfully.
+  A signed-out source otherwise fails silently and new assignments would be missed.
 - **Copies.** Duplicating a synced task makes an ordinary, unlinked task.
 
 ## Data safety

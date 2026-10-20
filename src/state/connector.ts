@@ -5,7 +5,7 @@
  *
  * Extension → page:
  *   { from: 'polaris-connector', type: 'hello', version }
- *   { from: 'polaris-connector', type: 'batch', batch }          (see SyncBatch)
+ *   { from: 'polaris-connector', type: 'batch', batch }          (see SyncBatch; includes fetchedAt)
  *   { from: 'polaris-connector', type: 'status', kind, ok, message?, at }
  * Page → extension:
  *   { from: 'polaris-app', type: 'ready' }      (page loaded; send cached batches)

@@ -96,7 +96,11 @@ async function getAll(url, fetchImpl) {
   return { results, complete: !next };
 }
 
-/** Reads Canvas and returns a sync batch. Throws SignedOutError or Error. */
+/**
+ * Reads Canvas and returns a sync batch, stamped with `fetchedAt` (when the
+ * fetch started) so Polaris can show the real sync time when it replays a
+ * cached batch. Throws SignedOutError or Error.
+ */
 export async function fetchCanvasBatch(fetchImpl = fetch, now = new Date()) {
   const window = fetchWindow(now);
   const plannerUrl =
@@ -110,5 +114,6 @@ export async function fetchCanvasBatch(fetchImpl = fetch, now = new Date()) {
     kind: 'canvas',
     items: toItems(planner.results, courses.results),
     ...(planner.complete ? { window } : {}),
+    fetchedAt: now.toISOString(),
   };
 }

@@ -199,11 +199,17 @@ export class Store {
 
   // ---- assignment sync --------------------------------------------------------
 
-  /** Merges one batch from the extension. The whole sync is a single undo step. */
+  /**
+   * Merges one batch from the extension. The whole sync is a single undo step.
+   * The source's sync time is when the batch was fetched (a cached batch
+   * replayed on page load can be hours old), never later than now.
+   */
   applySync = (batch: SyncBatch, options?: SyncOptions): SyncSummary => {
     const { data, summary } = sync.applySync(this.state.data, batch, this.ctx, options);
     this.commit(`Sync ${batch.kind === 'canvas' ? 'Canvas' : 'Gradescope'}`, data);
-    this.setSourceStatus(batch.kind, { at: this.ctx.now(), ok: true, message: describeSummary(summary) });
+    const now = this.ctx.now();
+    const at = batch.fetchedAt && Date.parse(batch.fetchedAt) < Date.parse(now) ? batch.fetchedAt : now;
+    this.setSourceStatus(batch.kind, { at, ok: true, message: describeSummary(summary) });
     return summary;
   };
 
@@ -211,8 +217,15 @@ export class Store {
     if (version !== this.state.connector.version) this.set({ connector: { ...this.state.connector, version } });
   };
 
+  /**
+   * Records a source's latest sync result. An older result is ignored: on page
+   * load the extension replays a cached failure and then the cached batch from
+   * before it, and the failure must stay visible until a newer sync succeeds.
+   */
   setSourceStatus = (kind: SourceKind, status: SourceStatus) => {
     const { connector } = this.state;
+    const current = connector.sources[kind];
+    if (current && Date.parse(status.at) < Date.parse(current.at)) return;
     this.set({ connector: { ...connector, sources: { ...connector.sources, [kind]: status } } });
   };
 

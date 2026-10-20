@@ -132,6 +132,8 @@ describe('fetching from Canvas', () => {
     );
     expect(batch.items.map((i) => i.title)).toEqual(['Homework 5', 'Quiz 3']);
     expect(batch.window).toEqual({ start: '2026-10-04T12:00:00.000Z', end: '2027-02-15T12:00:00.000Z' });
+    expect(batch.fetchedAt).toBe('2026-10-18T12:00:00.000Z');
+    expect(parseSyncBatch(batch)?.batch.fetchedAt).toBe(batch.fetchedAt);
   });
 
   it('reports a signed-out user clearly', async () => {

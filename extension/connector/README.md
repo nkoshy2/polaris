@@ -15,7 +15,12 @@ anywhere else.
 
 Polaris syncs when it opens, every 30 minutes while Chrome is running, and when you click **Backup → Sync now**. The
 Backup dialog shows the extension version, the last sync, any error, and deleted assignments that won't be added
-again.
+again. If a source's latest sync failed (for example you were signed out of Gradescope), Polaris also shows a notice
+under its header until that source syncs successfully again.
+
+Each batch carries `fetchedAt`, the time it was fetched. The latest batch and status for each source are cached in
+`chrome.storage.local` and sent to Polaris when it opens, so Polaris shows when the data was actually fetched rather
+than the time it arrived.
 
 After changing the extension's files, click the reload icon on its card in `chrome://extensions`.
 

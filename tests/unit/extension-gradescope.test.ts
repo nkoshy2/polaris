@@ -151,6 +151,7 @@ describe('fetching from Gradescope', () => {
     expect(batch.items.map((i) => i.title)).toEqual(['Homework 4', 'Homework 5 & Lab', 'Homework 6', 'Midterm (in class)']);
     expect(batch.items[0]).toMatchObject({ kind: 'gradescope', course: 'AE 370' });
     expect(batch.window).toBeDefined();
+    expect(batch.fetchedAt).toBe(NOW.toISOString());
   });
 
   it('reports a signed-out user clearly', async () => {

@@ -1,9 +1,11 @@
+import { SOURCE_KINDS } from '../domain/types';
+import { SOURCE_NAMES } from '../state/connector';
 import { useStore, useStoreState } from '../state/context';
 
-/** Persistent banners about the health of stored data. */
+/** Persistent banners about the health of stored data and assignment sync. */
 export function Notices({ onOpenData }: { onOpenData: () => void }) {
   const store = useStore();
-  const { loadStatus, loadIssues, saveError, readOnly } = useStoreState();
+  const { loadStatus, loadIssues, saveError, readOnly, connector } = useStoreState();
 
   const banners: { key: string; tone: 'warn' | 'error'; body: preact.ComponentChildren; actions?: preact.ComponentChildren }[] = [];
 
@@ -73,6 +75,31 @@ export function Notices({ onOpenData }: { onOpenData: () => void }) {
             Dismiss
           </button>
         </>
+      ),
+    });
+  }
+
+  // A source whose latest sync failed (e.g. signed out) would otherwise miss new
+  // assignments without anyone noticing. Cleared by that source's next good sync.
+  const failed = SOURCE_KINDS.flatMap((kind) => {
+    const status = connector.sources[kind];
+    return status && !status.ok ? [{ kind, status }] : [];
+  });
+  if (failed.length > 0) {
+    banners.push({
+      key: 'sync',
+      tone: 'warn',
+      body: (
+        <>
+          <strong>{failed.map((f) => SOURCE_NAMES[f.kind]).join(' and ')} sync failed.</strong>{' '}
+          {failed.map((f) => f.status.message && <span key={f.kind}>{f.status.message} </span>)}
+          New assignments won't appear in Polaris until {failed.length > 1 ? 'they sync' : 'it syncs'} again.
+        </>
+      ),
+      actions: (
+        <button type="button" class="button small" onClick={onOpenData}>
+          Open Backup
+        </button>
       ),
     });
   }

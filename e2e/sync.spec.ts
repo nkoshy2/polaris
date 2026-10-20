@@ -14,9 +14,9 @@ async function fromConnector(page: Page, message: Record<string, unknown>) {
   await page.evaluate((msg) => window.postMessage({ from: 'polaris-connector', ...msg }, location.origin), message);
 }
 
-async function sendBatch(page: Page, kind: 'canvas' | 'gradescope', items: Item[]) {
+async function sendBatch(page: Page, kind: 'canvas' | 'gradescope', items: Item[], fetchedAt?: string) {
   await page.evaluate(
-    ({ kind, items }) => {
+    ({ kind, items, fetchedAt }) => {
       const dueAt = new Date(2026, 9, 24, 23, 59).toISOString();
       const batch = {
         kind,
@@ -28,10 +28,11 @@ async function sendBatch(page: Page, kind: 'canvas' | 'gradescope', items: Item[
           submitted: false,
           ...it,
         })),
+        ...(fetchedAt ? { fetchedAt } : {}),
       };
       window.postMessage({ from: 'polaris-connector', type: 'batch', batch }, location.origin);
     },
-    { kind, items },
+    { kind, items, fetchedAt },
   );
 }
 
@@ -114,4 +115,31 @@ test('shows sync failures reported by the extension, and ignores messages from o
   await page.keyboard.press('Escape');
   await goToAllTasks(page);
   await expect(row(page, 'Injected')).toHaveCount(0);
+});
+
+test('a failed sync shows a notice until that source syncs again, and replayed batches keep their fetch time', async ({ app: page }) => {
+  // Relative to the page's fixed clock, not the test runner's.
+  const pageNow = await page.evaluate(() => Date.now());
+  const hoursAgo = (h: number) => new Date(pageNow - h * 3_600_000).toISOString();
+  await fromConnector(page, { type: 'hello', version: '0.1.0' });
+  // What the extension replays on page load: the cached failure, then the older cached batches.
+  await fromConnector(page, { type: 'status', kind: 'gradescope', ok: false, message: 'Not signed in to Gradescope.', at: hoursAgo(1) });
+  const canvasFetched = hoursAgo(3);
+  await sendBatch(page, 'canvas', [hw], canvasFetched);
+  await sendBatch(page, 'gradescope', [], hoursAgo(5));
+
+  const notice = page.locator('.notice').filter({ hasText: 'Gradescope sync failed.' });
+  await expect(notice).toHaveAttribute('role', 'status');
+  await expect(notice).toContainText('Not signed in to Gradescope.');
+  await expectNoA11yViolations(page);
+
+  await notice.getByRole('button', { name: 'Open Backup' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Backup & restore' });
+  await expect(dialog).toContainText('Gradescope: sync failed');
+  const when = await page.evaluate((at) => new Date(at).toLocaleString(), canvasFetched);
+  await expect(dialog).toContainText(`Canvas: synced ${when} (added 1 assignment)`);
+  await page.keyboard.press('Escape');
+
+  await sendBatch(page, 'gradescope', [], hoursAgo(0));
+  await expect(notice).toHaveCount(0);
 });

@@ -172,7 +172,10 @@ async function getPage(path, fetchImpl) {
   return html;
 }
 
-/** Reads Gradescope and returns a sync batch. Throws SignedOutError, LayoutError or Error. */
+/**
+ * Reads Gradescope and returns a sync batch, stamped with `fetchedAt` (when the
+ * fetch started). Throws SignedOutError, LayoutError or Error.
+ */
 export async function fetchGradescopeBatch(fetchImpl = fetch, now = new Date()) {
   const window = fetchWindow(now);
   const courses = currentCourses(parseDashboard(await getPage('/account', fetchImpl))).slice(0, MAX_COURSES);
@@ -187,5 +190,5 @@ export async function fetchGradescopeBatch(fetchImpl = fetch, now = new Date()) 
     items.push(...toItems(rows, course.name, window));
   }
   if (!rowCount) throw new LayoutError('assignment table');
-  return { kind: 'gradescope', items, window };
+  return { kind: 'gradescope', items, window, fetchedAt: now.toISOString() };
 }

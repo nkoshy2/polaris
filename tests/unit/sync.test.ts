@@ -110,6 +110,14 @@ describe('reading a batch from the extension', () => {
     expect(result?.batch.window).toBeUndefined();
     expect(result?.rejected).toHaveLength(4);
   });
+
+  it('keeps a valid fetch time and drops an invalid one', () => {
+    const at = (fetchedAt: unknown) => parseSyncBatch({ kind: 'canvas', items: [], fetchedAt })?.batch.fetchedAt;
+    expect(at('2026-10-18T07:00:00-05:00')).toBe('2026-10-18T12:00:00.000Z');
+    expect(at('an hour ago')).toBeUndefined();
+    expect(at(1_760_000_000_000)).toBeUndefined();
+    expect(at(undefined)).toBeUndefined();
+  });
 });
 
 describe('creating tasks from assignments', () => {
@@ -342,5 +350,35 @@ describe('store', () => {
     store.applySync(batch([canvas()]));
     store.applySync(batch([canvas()]));
     expect(store.getState().undo).toHaveLength(1);
+  });
+
+  it('records when a batch was fetched, not when it arrived, with its summary', () => {
+    const store = new Store(new MemoryStore(), testCtx('2026-10-18T12:00:00.000Z'));
+    store.applySync(batch([canvas()], { fetchedAt: '2026-10-18T03:30:00.000Z' }));
+    expect(store.getState().connector.sources.canvas).toEqual({
+      at: '2026-10-18T03:30:00.000Z',
+      ok: true,
+      message: 'added 1 assignment',
+    });
+  });
+
+  it('uses the current time for a batch without a fetch time, or one from the future', () => {
+    const store = new Store(new MemoryStore(), testCtx('2026-10-18T12:00:00.000Z'));
+    store.applySync(batch([]));
+    expect(store.getState().connector.sources.canvas?.at).toBe('2026-10-18T12:00:00.000Z');
+    store.applySync(batch([], { kind: 'gradescope', fetchedAt: '2026-10-19T12:00:00.000Z' }));
+    expect(store.getState().connector.sources.gradescope?.at).toBe('2026-10-18T12:00:00.000Z');
+  });
+
+  it('keeps a replayed failure over the older cached batch, until a newer sync succeeds', () => {
+    const store = new Store(new MemoryStore(), testCtx('2026-10-18T12:00:00.000Z'));
+    const failure = { at: '2026-10-18T11:00:00.000Z', ok: false, message: 'Not signed in to Gradescope.' };
+    // On page load the extension sends cached failures first, then cached batches.
+    store.setSourceStatus('gradescope', failure);
+    store.applySync(batch([], { kind: 'gradescope', fetchedAt: '2026-10-18T08:00:00.000Z' }));
+    expect(store.getState().connector.sources.gradescope).toEqual(failure);
+
+    store.applySync(batch([], { kind: 'gradescope', fetchedAt: '2026-10-18T11:30:00.000Z' }));
+    expect(store.getState().connector.sources.gradescope).toMatchObject({ ok: true, at: '2026-10-18T11:30:00.000Z' });
   });
 });
