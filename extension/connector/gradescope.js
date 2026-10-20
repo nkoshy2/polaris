@@ -110,8 +110,11 @@ const titleKey = (title) => title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-')
 export function parseCoursePage(html, courseId) {
   const tableStart = html.search(/id=["']assignments-student-table["']/);
   const table = tableStart < 0 ? html : html.slice(tableStart);
+  // Assignment rows are in <tbody>; skipping <thead> keeps column headers from becoming assignments.
+  const bodyStart = table.search(/<tbody\b/i);
+  const body = bodyStart < 0 ? table : table.slice(bodyStart);
   const rows = [];
-  for (const chunk of table.split(/<tr\b/i).slice(1)) {
+  for (const chunk of body.split(/<tr\b/i).slice(1)) {
     const close = chunk.search(/<\/tr>/i);
     const row = close < 0 ? chunk : chunk.slice(0, close);
     // The first header cell holds the assignment: a link (submitted), a button (can submit) or plain text.
@@ -183,12 +186,16 @@ export async function fetchGradescopeBatch(fetchImpl = fetch, now = new Date()) 
 
   const items = [];
   let rowCount = 0;
+  let everyCourseRead = true;
   // One course at a time, to be gentle on Gradescope.
   for (const course of courses) {
     const rows = parseCoursePage(await getPage(`/courses/${course.id}`, fetchImpl), course.id);
     rowCount += rows.length;
+    if (!rows.length) everyCourseRead = false;
     items.push(...toItems(rows, course.name, window));
   }
   if (!rowCount) throw new LayoutError('assignment table');
-  return { kind: 'gradescope', items, window, fetchedAt: now.toISOString() };
+  // A course page that yielded nothing may not have been understood, so only claim a complete
+  // fetch (which lets Polaris flag removed assignments) when every course was read.
+  return { kind: 'gradescope', items, ...(everyCourseRead ? { window } : {}), fetchedAt: now.toISOString() };
 }

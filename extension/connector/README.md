@@ -22,6 +22,10 @@ Each batch carries `fetchedAt`, the time it was fetched. The latest batch and st
 `chrome.storage.local` and sent to Polaris when it opens, so Polaris shows when the data was actually fetched rather
 than the time it arrived.
 
+Opening Polaris re-syncs only if the last sync started more than 5 minutes ago. Batches go to the most recently used
+Polaris tab at each address (the published site and localhost keep separate data), and only to tabs where Polaris
+itself has loaded.
+
 After changing the extension's files, click the reload icon on its card in `chrome://extensions`.
 
 ## What it reads

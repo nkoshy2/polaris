@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Polaris Connector",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Adds your Canvas and Gradescope assignments to Polaris as tasks, using your existing sign-in. Sends nothing anywhere else.",
   "permissions": ["alarms", "storage"],
   "host_permissions": [

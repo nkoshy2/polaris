@@ -10,6 +10,8 @@ import { fetchGradescopeBatch } from './gradescope.js';
 
 const ALARM = 'sync';
 const PERIOD_MINUTES = 30;
+/** Opening Polaris re-syncs only if the last sync started longer ago than this. */
+const PAGE_LOAD_MIN_MS = 5 * 60 * 1000;
 const POLARIS_URLS = ['https://nkoshy2.github.io/polaris/*', 'http://localhost:5173/*', 'http://localhost:4173/*'];
 
 /**
@@ -29,16 +31,32 @@ async function readCache() {
   return { batches, statuses };
 }
 
-async function deliver(message) {
+/** Tabs where Polaris itself said it is ready (not just any page on a matching address). */
+async function polarisTabs() {
+  const { readyTabs = [] } = await chrome.storage.session.get('readyTabs');
   const tabs = await chrome.tabs.query({ url: POLARIS_URLS });
-  // One tab is enough: Polaris shares saved changes with its other tabs.
-  const tab = tabs.sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0))[0];
-  if (!tab?.id) return;
-  try {
-    await chrome.tabs.sendMessage(tab.id, message);
-  } catch {
-    // The tab was opened before the extension loaded, so it has no content script.
-    // It gets the cached batch when it is reloaded.
+  return tabs.filter((t) => t.id != null && readyTabs.includes(t.id) && t.url);
+}
+
+async function rememberTab(tabId) {
+  const { readyTabs = [] } = await chrome.storage.session.get('readyTabs');
+  if (!readyTabs.includes(tabId)) await chrome.storage.session.set({ readyTabs: [...readyTabs, tabId] });
+}
+
+async function deliver(message) {
+  // Each address (published site, localhost) has its own saved data, so each needs the batch.
+  // Within one address one tab is enough: Polaris shares saved changes with its other tabs.
+  const newest = new Map();
+  for (const tab of await polarisTabs()) {
+    const origin = new URL(tab.url).origin;
+    if ((tab.lastAccessed ?? 0) >= (newest.get(origin)?.lastAccessed ?? -1)) newest.set(origin, tab);
+  }
+  for (const tab of newest.values()) {
+    try {
+      await chrome.tabs.sendMessage(tab.id, message);
+    } catch {
+      // The tab closed or was reloaded; it gets the cached batch when it next loads.
+    }
   }
 }
 
@@ -64,6 +82,7 @@ async function syncSource(kind) {
 /** Runs one sync of every source, in order; concurrent requests share the run in progress. */
 function syncAll() {
   running ??= (async () => {
+    await chrome.storage.local.set({ lastSyncAt: Date.now() });
     for (const kind of Object.keys(SOURCES)) await syncSource(kind);
   })().finally(() => {
     running = null;
@@ -88,11 +107,14 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id) return false;
   if (message?.type === 'page-ready') {
-    // The page just loaded: give it what we have, then refresh.
-    readCache().then(({ batches, statuses }) => {
+    // The page just loaded: give it what we have, then refresh unless we just did.
+    (async () => {
+      if (sender.tab?.id != null) await rememberTab(sender.tab.id);
+      const { batches, statuses } = await readCache();
       sendResponse({ version, batches: Object.values(batches), statuses: Object.values(statuses).filter((s) => !s.ok) });
-      syncAll();
-    });
+      const { lastSyncAt = 0 } = await chrome.storage.local.get('lastSyncAt');
+      if (Date.now() - lastSyncAt > PAGE_LOAD_MIN_MS) syncAll();
+    })();
     return true;
   }
   if (message?.type === 'sync-now') {

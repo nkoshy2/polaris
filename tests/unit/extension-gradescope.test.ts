@@ -78,6 +78,15 @@ const COURSE = `
   </tbody>
 </table>`;
 
+/** A second course with one open assignment. */
+const OTHER_COURSE = `
+<table id="assignments-student-table"><tbody>
+  <tr role="row"><th class="table--primaryLink" role="rowheader" scope="row">
+    <button class="js-submitAssignment" data-assignment-id="8100" data-assignment-title="Lab 2" type="button">Lab 2</button></th>
+    <td><div class="submissionStatus--text">No Submission</div></td>
+    <td><time class="submissionTimeChart--dueDate" datetime="2026-10-28 23:59:00 -0500">Due</time></td></tr>
+</tbody></table>`;
+
 const NOW = new Date('2026-10-19T12:00:00Z');
 
 describe('Gradescope dashboard', () => {
@@ -101,6 +110,12 @@ describe('Gradescope course page', () => {
 
   it('reads every assignment row and skips the header', () => {
     expect(rows.map((r) => r.title)).toEqual(['Homework 4', 'Homework 5 & Lab', 'Homework 6', 'Midterm (in class)', 'Homework 1']);
+  });
+
+  it('never turns a column header into an assignment, whatever it says', () => {
+    const renamed = COURSE.replace('<th>Name</th>', '<th><button>Assignment</button> <span class="sr-only">sorted ascending</span></th>');
+    expect(parseCoursePage(renamed, '1366944').map((r) => r.title)).not.toContain('Assignment sorted ascending');
+    expect(parseCoursePage(renamed, '1366944')).toHaveLength(5);
   });
 
   it('treats a score or “Submitted” as done and “No Submission” as open', () => {
@@ -144,14 +159,23 @@ function fakeFetch(pages: Record<string, string>, finalUrl?: (url: string) => st
 describe('fetching from Gradescope', () => {
   it('reads current-term courses and keeps assignments inside the window', async () => {
     const batch = await fetchGradescopeBatch(
-      fakeFetch({ '/account': DASHBOARD, '/courses/1366944': COURSE, '/courses/1360272': '<table id="assignments-student-table"></table>' }),
+      fakeFetch({ '/account': DASHBOARD, '/courses/1366944': COURSE, '/courses/1360272': OTHER_COURSE }),
       NOW,
     );
     // Homework 1 (Sep 4) is before the two-week window; Spring 2025 isn't fetched at all.
-    expect(batch.items.map((i) => i.title)).toEqual(['Homework 4', 'Homework 5 & Lab', 'Homework 6', 'Midterm (in class)']);
+    expect(batch.items.map((i) => i.title)).toEqual(['Homework 4', 'Homework 5 & Lab', 'Homework 6', 'Midterm (in class)', 'Lab 2']);
     expect(batch.items[0]).toMatchObject({ kind: 'gradescope', course: 'AE 370' });
     expect(batch.window).toBeDefined();
     expect(batch.fetchedAt).toBe(NOW.toISOString());
+  });
+
+  it('claims a complete fetch only when every course page was read', async () => {
+    const batch = await fetchGradescopeBatch(
+      fakeFetch({ '/account': DASHBOARD, '/courses/1366944': COURSE, '/courses/1360272': '<div>redesigned page</div>' }),
+      NOW,
+    );
+    expect(batch.items).toHaveLength(4);
+    expect(batch.window).toBeUndefined();
   });
 
   it('reports a signed-out user clearly', async () => {

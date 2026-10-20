@@ -111,6 +111,13 @@ describe('reading a batch from the extension', () => {
     expect(result?.rejected).toHaveLength(4);
   });
 
+  it('drops the fetch window when the batch is too large to read in full', () => {
+    const items = Array.from({ length: 2_001 }, (_, i) => canvas({ externalId: `canvas:x:${i}` }));
+    const result = parseSyncBatch({ kind: 'canvas', items, window: { start: '2026-10-04T00:00:00Z', end: '2027-01-01T00:00:00Z' } });
+    expect(result?.batch.items).toHaveLength(2_000);
+    expect(result?.batch.window).toBeUndefined();
+  });
+
   it('keeps a valid fetch time and drops an invalid one', () => {
     const at = (fetchedAt: unknown) => parseSyncBatch({ kind: 'canvas', items: [], fetchedAt })?.batch.fetchedAt;
     expect(at('2026-10-18T07:00:00-05:00')).toBe('2026-10-18T12:00:00.000Z');

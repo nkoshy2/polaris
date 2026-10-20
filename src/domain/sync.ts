@@ -108,7 +108,10 @@ export function parseSyncBatch(raw: unknown): { batch: SyncBatch; rejected: stri
   });
   if (raw.items.length > LIMIT_BATCH_ITEMS) rejected.push(`Only the first ${LIMIT_BATCH_ITEMS} items were read.`);
   const w = raw.window;
-  const window = isObject(w) && isIsoTimestamp(w.start) && isIsoTimestamp(w.end) ? { start: w.start, end: w.end } : undefined;
+  // A truncated batch isn't complete, so it can't show that anything was removed.
+  const complete = raw.items.length <= LIMIT_BATCH_ITEMS;
+  const window =
+    complete && isObject(w) && isIsoTimestamp(w.start) && isIsoTimestamp(w.end) ? { start: w.start, end: w.end } : undefined;
   const fetchedAt = isIsoTimestamp(raw.fetchedAt) ? new Date(raw.fetchedAt).toISOString() : undefined;
   return { batch: { kind, items, ...(window ? { window } : {}), ...(fetchedAt ? { fetchedAt } : {}) }, rejected };
 }
