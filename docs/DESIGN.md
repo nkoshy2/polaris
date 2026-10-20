@@ -88,10 +88,57 @@ The invariant is that **a completed task never has open steps.** It is enforced 
 - "Completed in the last 7 days" counts tasks whose completion falls on today or one of the six days before, in local
   time.
 
+## Assignment sync
+
+Canvas and Gradescope assignments can become tasks. Polaris itself still makes no network requests. The optional
+Polaris Connector Chrome extension reads assignments using the user's existing sign-in on those sites (UIUC does not
+allow personal access tokens) and hands them to the Polaris tab. The merge rules live in `src/domain/sync.ts`:
+
+| Upstream                                   | Polaris                                                              |
+| ------------------------------------------ | -------------------------------------------------------------------- |
+| New assignment                             | An open task, importance normal, tagged with its course              |
+| Title or deadline changed                  | Updated, unless the user edited that field since the last sync       |
+| Submitted                                  | The task is completed (with its steps), once per submission          |
+| Missing from a complete fetch              | `removedAt` is set; the task is never deleted                        |
+| An assignment the user deleted             | Never re-created; listed in `dismissedSources` until allowed again   |
+| Same assignment in Canvas and Gradescope   | One task; the second source is linked as an alias                    |
+
+- **Course tags.** The tag is "DEPT number" when the course name contains one, so Canvas's
+  "Fall 2026-AE 312-Compressible Flow-Section A" and Gradescope's "ae_312_120268_262662" both become "AE 312". An
+  existing tag with that name (ignoring case) is reused. A user who removes the tag from a task keeps it removed.
+- **Due dates.** Upstream deadlines are exact times, and the due date is their local calendar date. A deadline in the
+  first hour of a day (12:00–12:59 AM) counts as the evening before, the day the work has to be done. The exact
+  deadline is kept in `source.dueAt`.
+- **User edits win.** `source.syncedTitle` and `source.syncedDue` hold the last upstream values. A task field that
+  differs from them was edited by the user and is left alone; the others keep following upstream.
+- **Submission.** `source.submittedKeys` lists which linked sources currently report a submission. The task is
+  completed when that list goes from empty to non-empty, so a submitted task the user reopens stays open until it is
+  unsubmitted and submitted again. Reopening is never done by sync.
+- **Duplicates.** A Gradescope assignment links to a Canvas task (and vice versa) when the course tag, the title
+  (ignoring case, spaces and punctuation) and the due date match. The first source to report the assignment owns
+  its title, due date and link; the alias only reports submission.
+- **Removed upstream.** A batch can say which deadline window it fetched completely. Only linked tasks with a
+  deadline inside that window can be flagged, so a narrower fetch never flags assignments outside it.
+- **Undo.** Each sync is one undo step. A sync that changes nothing records no step.
+- **Extension messages.** The extension's content script and the page use `window.postMessage` on the page's own
+  origin (protocol in `src/state/connector.ts`). Polaris accepts only messages from its own window and origin, and
+  validates every batch with `parseSyncBatch`. Sync status is kept in memory and shown under Backup.
+- **Sync times.** The extension stamps each batch with `fetchedAt`, the time it was fetched. When Polaris loads, the
+  extension replays its cached batches, which can be hours old, so the status shows `fetchedAt` (never later than
+  now) rather than the time the batch arrived. A batch without it counts as fetched now. A status older than the one
+  already shown is ignored: on load the cached failure arrives before the cached batch from the sync before it, and
+  the failure must win.
+- **Failures are visible.** While any source's latest status is a failure (for example "Not signed in to
+  Gradescope."), a notice under the header says so in words, with the extension's message and an *Open Backup*
+  button. It is `role="status"`, so it doesn't interrupt, and it disappears when that source next syncs successfully.
+  A signed-out source otherwise fails silently and new assignments would be missed.
+- **Copies.** Duplicating a synced task makes an ordinary, unlinked task.
+
 ## Data safety
 
 - **Validation** runs on every create and edit (`src/domain/validation.ts`) and again when data is loaded or imported
-  (`src/storage/schema.ts`).
+  (`src/storage/schema.ts`). Assignments from the extension are validated by `parseSyncBatch`, and only `https`
+  links are kept.
 - **Repair, don't discard.** When loading, any record that is recognisably an object is kept, and broken fields are
   replaced with safe defaults. An over-long title is moved into the notes. Every repair is listed for the user, and
   the untouched original is saved as a *recovery copy*, which can be downloaded from Backup.

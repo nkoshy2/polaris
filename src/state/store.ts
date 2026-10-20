@@ -4,10 +4,13 @@
  * actions; all task rules stay in src/domain.
  */
 import { localDate } from '../domain/dates';
+import * as sync from '../domain/sync';
+import type { SyncBatch, SyncOptions, SyncSummary } from '../domain/sync';
 import * as ops from '../domain/tasks';
 import type { Ctx, TaskInput } from '../domain/tasks';
-import { emptyData, type AppData, type Task } from '../domain/types';
+import { emptyData, type AppData, type SourceKind, type Task } from '../domain/types';
 import { Repository, StorageError, type KeyValueStore, type LoadStatus } from '../storage/repository';
+import { describeSummary, type SourceStatus } from './connector';
 
 const UNDO_LIMIT = 50;
 
@@ -27,6 +30,8 @@ export interface StoreState {
   undo: UndoEntry[];
   /** Incremented when another tab changed the data. */
   externalChange: number;
+  /** The Polaris Connector extension, as reported by it. Not persisted. */
+  connector: { version: string | null; sources: Partial<Record<SourceKind, SourceStatus>> };
 }
 
 type Listener = () => void;
@@ -59,6 +64,7 @@ export class Store {
       saveError: loadError,
       undo: [],
       externalChange: 0,
+      connector: { version: null, sources: {} },
     };
     // Persist repairs straight away so they are not re-reported on every start.
     if (loaded.status === 'repaired' || loaded.status === 'restoredPrevious') this.persist(loaded.data);
@@ -162,7 +168,7 @@ export class Store {
   };
 
   deleteTasks = (ids: string[]) => {
-    this.commit(ids.length === 1 ? 'Delete task' : `Delete ${ids.length} tasks`, ops.deleteTasks(this.state.data, ids));
+    this.commit(ids.length === 1 ? 'Delete task' : `Delete ${ids.length} tasks`, ops.deleteTasks(this.state.data, ids, this.ctx));
   };
 
   duplicateTask = (id: string): Task => {
@@ -189,6 +195,43 @@ export class Store {
 
   deleteTag = (id: string) => {
     this.commit('Delete tag', ops.deleteTag(this.state.data, id, this.ctx));
+  };
+
+  // ---- assignment sync --------------------------------------------------------
+
+  /**
+   * Merges one batch from the extension. The whole sync is a single undo step.
+   * The source's sync time is when the batch was fetched (a cached batch
+   * replayed on page load can be hours old), never later than now.
+   */
+  applySync = (batch: SyncBatch, options?: SyncOptions): SyncSummary => {
+    const { data, summary } = sync.applySync(this.state.data, batch, this.ctx, options);
+    this.commit(`Sync ${batch.kind === 'canvas' ? 'Canvas' : 'Gradescope'}`, data);
+    const now = this.ctx.now();
+    const at = batch.fetchedAt && Date.parse(batch.fetchedAt) < Date.parse(now) ? batch.fetchedAt : now;
+    this.setSourceStatus(batch.kind, { at, ok: true, message: describeSummary(summary) });
+    return summary;
+  };
+
+  connectorHello = (version: string) => {
+    if (version !== this.state.connector.version) this.set({ connector: { ...this.state.connector, version } });
+  };
+
+  /**
+   * Records a source's latest sync result. An older result is ignored: on page
+   * load the extension replays a cached failure and then the cached batch from
+   * before it, and the failure must stay visible until a newer sync succeeds.
+   */
+  setSourceStatus = (kind: SourceKind, status: SourceStatus) => {
+    const { connector } = this.state;
+    const current = connector.sources[kind];
+    if (current && Date.parse(status.at) < Date.parse(current.at)) return;
+    this.set({ connector: { ...connector, sources: { ...connector.sources, [kind]: status } } });
+  };
+
+  /** Lets sync add these deleted assignments again (pass none to restore all). */
+  restoreDismissed = (keys?: string[]) => {
+    this.commit('Restore deleted assignments', sync.restoreDismissed(this.state.data, keys));
   };
 
   // ---- backup -----------------------------------------------------------------

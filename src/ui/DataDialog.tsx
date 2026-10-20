@@ -1,6 +1,8 @@
 import { useState } from 'preact/hooks';
 import { localDate } from '../domain/dates';
 import { MAX_IMPORT_BYTES, exportFilename, exportJson, parseBackup, type ImportPreview } from '../storage/backup';
+import { SOURCE_KINDS } from '../domain/types';
+import { SOURCE_NAMES, sendToConnector } from '../state/connector';
 import { useStore, useStoreState } from '../state/context';
 import { Dialog } from './Dialog';
 import { useUI } from './uiContext';
@@ -63,6 +65,8 @@ export function DataDialog({ onClose }: { onClose: () => void }) {
           device or browser.
         </p>
       </section>
+
+      <SourcesSection />
 
       <section class="data-section" aria-labelledby="export-h">
         <h3 id="export-h">Export</h3>
@@ -157,5 +161,94 @@ export function DataDialog({ onClose }: { onClose: () => void }) {
         </section>
       )}
     </Dialog>
+  );
+}
+
+/** Status of the Polaris Connector extension, and deleted assignments that sync skips. */
+function SourcesSection() {
+  const store = useStore();
+  const { data, readOnly, connector } = useStoreState();
+  const ui = useUI();
+  const dismissed = data.dismissedSources;
+
+  return (
+    <section class="data-section" aria-labelledby="sources-h">
+      <h3 id="sources-h">Canvas and Gradescope</h3>
+      {connector.version ? (
+        <>
+          <p>
+            The Polaris Connector extension (version {connector.version}) adds your Canvas and Gradescope assignments as
+            tasks. It reads them with your sign-in on those sites.
+          </p>
+          <ul class="source-list" aria-label="Sync status">
+            {SOURCE_KINDS.map((kind) => {
+              const status = connector.sources[kind];
+              const when = status && new Date(status.at).toLocaleString();
+              return (
+                <li key={kind}>
+                  <span>
+                    <strong>{SOURCE_NAMES[kind]}:</strong>{' '}
+                    {!status ? (
+                      'not synced yet'
+                    ) : status.ok ? (
+                      `synced ${when}${status.message ? ` (${status.message})` : ''}`
+                    ) : (
+                      <span class="source-failed">
+                        sync failed {when}
+                        {status.message ? `: ${status.message}` : ''}
+                      </span>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          <button
+            type="button"
+            class="button"
+            disabled={readOnly}
+            onClick={() => {
+              sendToConnector('sync-now');
+              ui.notify('Asked the extension to check Canvas and Gradescope.');
+            }}
+          >
+            Sync now
+          </button>
+        </>
+      ) : (
+        <p>
+          To add Canvas and Gradescope assignments as tasks automatically, install the Polaris Connector extension for
+          Chrome. It reads assignments with your sign-in on those sites; Polaris itself still sends nothing anywhere.
+        </p>
+      )}
+      {dismissed.length > 0 && (
+        <details class="dismissed">
+          <summary>
+            {dismissed.length === 1
+              ? '1 deleted assignment won’t be added again'
+              : `${dismissed.length} deleted assignments won’t be added again`}
+          </summary>
+          <ul class="source-list">
+            {dismissed.map((d) => (
+              <li key={d.keys[0]}>
+                <span>{d.title}</span>
+                <button
+                  type="button"
+                  class="button small"
+                  disabled={readOnly}
+                  onClick={() => {
+                    if (ui.attempt(() => store.restoreDismissed(d.keys))) {
+                      ui.notify(`“${d.title}” will be added again on the next sync.`, { undoable: true });
+                    }
+                  }}
+                >
+                  Allow again<span class="sr-only"> for “{d.title}”</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
   );
 }

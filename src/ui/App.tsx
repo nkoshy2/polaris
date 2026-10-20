@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { DEFAULT_QUERY, type DueFilter, type Query } from '../domain/query';
+import { parseSyncBatch } from '../domain/sync';
+import { SOURCE_NAMES, describeSync, readConnectorMessage, sendToConnector } from '../state/connector';
 import { KEYS } from '../storage/repository';
 import { useStore, useStoreState } from '../state/context';
 import { DataDialog } from './DataDialog';
@@ -151,16 +153,39 @@ export function App() {
         ui.notify('Updated with changes made in another tab.');
       }
     };
+    // Assignments from the Polaris Connector extension (see src/state/connector.ts).
+    const onMessage = (e: MessageEvent) => {
+      const msg = readConnectorMessage(e);
+      if (!msg) return;
+      if (msg.type === 'hello') store.connectorHello(msg.version);
+      else if (msg.type === 'status') store.setSourceStatus(msg.kind, msg.status);
+      else {
+        const parsed = parseSyncBatch(msg.batch);
+        if (!parsed) return;
+        const { kind } = parsed.batch;
+        try {
+          const text = describeSync(kind, store.applySync(parsed.batch));
+          if (text) ui.notify(text, { undoable: true });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'The assignments could not be added.';
+          store.setSourceStatus(kind, { at: new Date().toISOString(), ok: false, message });
+          ui.notify(`${SOURCE_NAMES[kind]} sync failed: ${message}`, { error: true });
+        }
+      }
+    };
     const refresh = () => store.refreshToday();
     const timer = setInterval(refresh, 60_000);
     document.addEventListener('keydown', onKey);
     document.addEventListener('visibilitychange', refresh);
     window.addEventListener('storage', onStorage);
+    window.addEventListener('message', onMessage);
+    sendToConnector('ready');
     return () => {
       clearInterval(timer);
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('visibilitychange', refresh);
       window.removeEventListener('storage', onStorage);
+      window.removeEventListener('message', onMessage);
     };
   }, [doUndo]);
 

@@ -178,7 +178,7 @@ describe('steps (subtasks)', () => {
 
   it('deleting a task deletes its steps with it', () => {
     const { data, tasks } = setup();
-    const next = deleteTasks(data, [tasks[0]!.id]);
+    const next = deleteTasks(data, [tasks[0]!.id], testCtx());
     expect(next.tasks).toHaveLength(0);
   });
 
@@ -191,7 +191,7 @@ describe('steps (subtasks)', () => {
 describe('delete and duplicate', () => {
   it('deletes only the selected tasks', () => {
     const { data, tasks } = seed([{ title: 'A' }, { title: 'B' }, { title: 'C' }]);
-    const next = deleteTasks(data, [tasks[0]!.id, tasks[2]!.id]);
+    const next = deleteTasks(data, [tasks[0]!.id, tasks[2]!.id], testCtx());
     expect(next.tasks.map((t) => t.title)).toEqual(['B']);
   });
 
