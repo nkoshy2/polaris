@@ -3,6 +3,9 @@ import { StoreContext } from './state/context';
 import { Store } from './state/store';
 import type { KeyValueStore } from './storage/repository';
 import { App } from './ui/App';
+import '@fontsource/figtree/400.css';
+import '@fontsource/figtree/600.css';
+import '@fontsource/figtree/700.css';
 import './styles.css';
 
 function storage(): KeyValueStore {

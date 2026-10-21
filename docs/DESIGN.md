@@ -59,7 +59,25 @@ Focus uses fixed tiers instead of a score. An open task appears in the **first**
 
 Open tasks that match no tier are not shown in Focus; they are always in All tasks. Inside a tier, tasks are ordered
 by earliest due date (tasks with no date last), then higher importance, then oldest created. The same ordering is the
-"Recommended" sort in All tasks. The app explains these rules under "How Focus decides what to show".
+"Recommended" sort in All tasks.
+
+The Focus screen shows the tiers as three lanes: **Now** (tiers 1–2), **This week** (tiers 3 and 5, headed "High
+importance" and "Everything else") and **Important** (tier 4). The lanes are only a layout; the tier order above is
+unchanged. The app explains these rules under "How the lanes are decided".
+
+## Quick add
+
+One line of text can set more than the title. The words below are taken out of the title; everything else stays in
+it. The line under the field previews the result before anything is added (`src/domain/quickadd.ts`).
+
+| Word                         | Sets                                                                  |
+| ---------------------------- | --------------------------------------------------------------------- |
+| `today`, `tomorrow`          | the due date                                                          |
+| `monday` … `sunday`, `mon` … | the due date: the next such day after today (a week out if it is today) |
+| `!high` or `!`, `!low`       | importance                                                            |
+| `#Name`                      | a tag, matched ignoring case; an unknown name creates the tag         |
+
+The title and any new tag names are validated before anything is created, so a rejected line adds nothing.
 
 ## Steps (subtasks)
 
@@ -83,8 +101,8 @@ The invariant is that **a completed task never has open steps.** It is enforced 
 - Step progress is shown per task as "X of Y steps".
 - Percentages are `floor(completed / total × 100)`, so 100% only ever means everything is done. With no tasks, no
   percentage is shown.
-- Each overview count on Focus (Overdue, Due today, Due in the next 7 days) equals the number of tasks in the list it
-  links to. A unit test checks this.
+- Each count in the Focus summary sentence (overdue, due today, more due this week) equals the number of tasks in
+  the list it links to. A unit test checks this.
 - "Completed in the last 7 days" counts tasks whose completion falls on today or one of the six days before, in local
   time.
 
@@ -164,6 +182,19 @@ allow personal access tokens) and hands them to the Polaris tab. The merge rules
 - **Destructive actions:** deleting one task asks first and can be undone. Bulk delete, tag delete and restoring a
   backup all ask first and can be undone. Undo stays available in the header and with Ctrl+Z, so it doesn't depend on
   the toast still being visible.
+
+## Visual design
+
+The look follows the Organic design system: a cream-and-sand ground, a terracotta accent for actions and overdue
+items, sage only for completion (checkboxes and progress), and ochre for the Important lane. Colours are the system's
+OKLCH tonal ramps, defined once at the top of `src/styles.css`. The theme is light only.
+
+Figtree is bundled with the app (`@fontsource/figtree`) rather than loaded from Google Fonts, so Polaris still makes
+no network requests.
+
+All tasks is filtered with a sentence ("Show **open** tasks due **any time** with **any** importance…"). Each bold
+word is a menu button (`src/ui/Menu.tsx`) whose accessible name contains the visible word. Tags are a filter of All
+tasks rather than separate views; `#tasks/<tag id>` links still open a tag directly.
 
 ## Accessibility
 

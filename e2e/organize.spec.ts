@@ -1,11 +1,10 @@
-import { expect, goToAllTasks, openNavIfCollapsed, quickAdd, row, test } from './fixtures';
+import { expect, goToAllTasks, pickFilter, quickAdd, row, test } from './fixtures';
 
 test('tags: create, assign, filter, find untagged, rename and delete without losing tasks', async ({ app: page }) => {
   await quickAdd(page, 'Draft budget');
   await quickAdd(page, 'Call plumber');
 
-  await openNavIfCollapsed(page);
-  await page.getByRole('button', { name: 'Manage' }).click();
+  await page.getByRole('banner').getByRole('button', { name: 'Tags' }).click();
   const tags = page.getByRole('dialog', { name: 'Tags' });
   await tags.getByLabel('New tag').fill('Finance');
   await tags.getByRole('button', { name: 'Create' }).click();
@@ -21,22 +20,18 @@ test('tags: create, assign, filter, find untagged, rename and delete without los
   await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
   await expect(row(page, 'Draft budget')).toContainText('Finance');
 
-  const nav = page.getByRole('navigation', { name: 'Views' });
-  await openNavIfCollapsed(page);
-  await nav.getByRole('link', { name: /Finance/ }).click();
+  await pickFilter(page, 'Tag', 'Finance');
   await expect(page.getByRole('heading', { level: 1, name: 'Finance' })).toBeVisible();
+  await expect(page).toHaveURL(/#tasks\/.+/);
   await expect(page.locator('li.task')).toHaveCount(1);
-  await expect(page.getByLabel('New task')).toBeVisible();
-  await expect(page.locator('.quick-add-label')).toContainText('tagged Finance');
+  await expect(page.getByLabel('New task')).toHaveAttribute('placeholder', 'Add a task tagged Finance');
 
-  await openNavIfCollapsed(page);
-  await nav.getByRole('link', { name: /Untagged/ }).click();
+  await pickFilter(page, 'Tag', 'Untagged');
   await expect(page.locator('li.task')).toHaveCount(1);
   await expect(row(page, 'Call plumber')).toBeVisible();
 
   // Rename, then delete the tag: the task survives and becomes untagged.
-  await openNavIfCollapsed(page);
-  await page.getByRole('button', { name: 'Manage' }).click();
+  await page.getByRole('banner').getByRole('button', { name: 'Tags' }).click();
   await tags.getByLabel('Name of tag Finance').fill('Money');
   await tags.getByRole('button', { name: 'Rename' }).click();
   await tags.getByRole('button', { name: 'Delete…' }).click();
@@ -68,15 +63,15 @@ test('search, filters, active-filter chips and reset', async ({ app: page }) => 
   await expect(page.locator('li.task')).toHaveCount(2);
   await expect(page.getByRole('searchbox', { name: 'Search tasks' })).toHaveValue('');
 
-  await page.getByLabel('Due', { exact: true }).selectOption('today');
+  await pickFilter(page, 'Due', 'Today');
   await expect(page.locator('li.task')).toHaveCount(1);
-  await page.getByLabel('Due', { exact: true }).selectOption('none');
+  await pickFilter(page, 'Due', 'No due date');
   await expect(row(page, 'Water plants')).toBeVisible();
-  await page.getByRole('button', { name: 'Remove filter Due: No due date' }).click();
+  await page.getByRole('button', { name: 'Reset filters' }).click();
   await expect(page.locator('li.task')).toHaveCount(2);
 
-  await page.getByLabel('Sort by').selectOption('title');
-  await page.getByLabel('Order').selectOption('desc');
+  await pickFilter(page, 'Sort by', 'Title');
+  await pickFilter(page, 'Order', 'Z to A');
   await expect(page.locator('li.task .task-title')).toHaveText(['Water plants', 'Submit grant application']);
 });
 
@@ -96,13 +91,15 @@ test('Focus groups explain urgency vs importance and overview counts link to mat
   await add('Someday', {});
 
   const main = page.getByRole('main');
-  await expect(main.getByRole('heading', { name: /Overdue \(1\)/ })).toBeVisible();
-  await expect(main.getByRole('heading', { name: /Due today \(1\)/ })).toBeVisible();
-  await expect(main.getByRole('heading', { name: /^High importance \(1\)/ })).toBeVisible();
+  await expect(main.getByRole('heading', { name: 'Now (2)' })).toBeVisible();
+  await expect(main.getByRole('heading', { name: 'Overdue', exact: true })).toBeVisible();
+  await expect(main.getByRole('heading', { name: 'Due today', exact: true })).toBeVisible();
+  await expect(main.getByRole('heading', { name: 'Important (1)' })).toBeVisible();
+  await expect(main.getByRole('region', { name: /This week/ })).toContainText('Nothing here. Nice.');
   await expect(row(page, 'Someday')).toHaveCount(0);
   await expect(row(page, 'Late invoice')).toContainText('Overdue by 3 days');
 
-  await main.getByRole('button', { name: /^1\s*Overdue/ }).click();
+  await main.getByRole('button', { name: '1 overdue' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'All tasks' })).toBeVisible();
   await expect(page.locator('li.task .task-title')).toHaveText(['Late invoice']);
 });

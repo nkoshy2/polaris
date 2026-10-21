@@ -1,4 +1,5 @@
 import { useMemo } from 'preact/hooks';
+import type { FocusTier } from '../domain/priority';
 import type { Task } from '../domain/types';
 import { useStore, useStoreState } from '../state/context';
 import { TaskItem } from './TaskItem';
@@ -8,12 +9,15 @@ interface Props {
   tasks: Task[];
   labelledBy?: string;
   label?: string;
+  variant?: 'card' | 'row';
+  /** The Focus tier every task in this list belongs to. */
+  tier?: FocusTier;
   selecting?: boolean;
   selected?: Set<string>;
   onSelect?: (id: string, selected: boolean) => void;
 }
 
-export function TaskList({ tasks, labelledBy, label, selecting = false, selected, onSelect }: Props) {
+export function TaskList({ tasks, labelledBy, label, variant = 'row', tier, selecting = false, selected, onSelect }: Props) {
   const store = useStore();
   const { data, today } = useStoreState();
   const ui = useUI();
@@ -38,13 +42,15 @@ export function TaskList({ tasks, labelledBy, label, selecting = false, selected
   };
 
   return (
-    <ul class="task-list" aria-labelledby={labelledBy} aria-label={labelledBy ? undefined : label}>
+    <ul class={`task-list task-list-${variant}`} aria-labelledby={labelledBy} aria-label={labelledBy ? undefined : label}>
       {tasks.map((task) => (
         <TaskItem
           key={task.id}
           task={task}
           tagsById={tagsById}
           today={today}
+          variant={variant}
+          tier={tier}
           selecting={selecting}
           selected={selected?.has(task.id) ?? false}
           onSelect={(id, s) => onSelect?.(id, s)}

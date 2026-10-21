@@ -1,4 +1,4 @@
-import { expect, goToAllTasks, quickAdd, row, test } from './fixtures';
+import { expect, goToAllTasks, pickFilter, quickAdd, row, test } from './fixtures';
 
 test('create, edit, complete, reopen and delete a task', async ({ app: page }) => {
   await quickAdd(page, 'Renew passport');
@@ -24,18 +24,18 @@ test('create, edit, complete, reopen and delete a task', async ({ app: page }) =
   await expect(page.getByText('Everything here is completed.')).toBeVisible();
 
   // Reopen from the Completed filter.
-  await page.getByLabel('Status', { exact: true }).selectOption('completed');
+  await pickFilter(page, 'Status', 'Completed');
   const done = row(page, 'Renew passport online');
   await expect(done).toContainText('Completed');
   await done.getByRole('checkbox').click();
   await expect(done).toHaveCount(0);
-  await page.getByLabel('Status', { exact: true }).selectOption('open');
+  await pickFilter(page, 'Status', 'Open');
   await expect(row(page, 'Renew passport online')).toBeVisible();
 
   // Delete (with confirmation) and undo.
   await row(page, 'Renew passport online').getByRole('button', { name: 'Renew passport online' }).click();
   await page.getByRole('button', { name: 'Delete…' }).click();
-  await page.getByRole('button', { name: 'Delete task' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Yes, delete' }).click();
   await expect(row(page, 'Renew passport online')).toHaveCount(0);
   await page.getByRole('status').getByRole('button', { name: 'Undo' }).click();
   await expect(row(page, 'Renew passport online')).toBeVisible();
@@ -83,7 +83,7 @@ test('steps: progress, inline completion, and parent rules', async ({ app: page 
 
   // Completing the task completes all steps.
   await goToAllTasks(page);
-  await page.getByLabel('Status', { exact: true }).selectOption('all');
+  await pickFilter(page, 'Status', 'Open and completed');
   const all = row(page, 'Move house');
   await all.getByRole('checkbox', { name: 'Complete “Move house”' }).check();
   await expect(all).toContainText('3 of 3 steps');
@@ -110,7 +110,7 @@ test('duplicate creates an open copy', async ({ app: page }) => {
 test('bulk complete and bulk delete selected tasks', async ({ app: page }) => {
   for (const t of ['One', 'Two', 'Three']) await quickAdd(page, t);
   await goToAllTasks(page);
-  await page.getByRole('button', { name: 'Select' }).click();
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
   await row(page, 'One').getByRole('checkbox', { name: 'Select “One”' }).check();
   await row(page, 'Two').getByRole('checkbox', { name: 'Select “Two”' }).check();
   await expect(page.getByText('2 selected')).toBeVisible();
@@ -118,11 +118,33 @@ test('bulk complete and bulk delete selected tasks', async ({ app: page }) => {
   await expect(page.locator('#scope-progress')).toContainText('2 of 3 tasks completed (66%)');
   await expect(row(page, 'One')).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Select' }).click();
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Select all shown' }).check();
   await page.getByRole('button', { name: 'Delete…' }).click();
   await page.getByRole('button', { name: 'Yes, delete' }).click();
   await expect(page.locator('#scope-progress')).toContainText('2 of 2 tasks completed (100%)');
   await page.keyboard.press('Control+z');
   await expect(row(page, 'Three')).toBeVisible();
+});
+
+test('quick-add shorthand sets the date, importance and tags, with a preview first', async ({ app: page }) => {
+  const input = page.getByLabel('New task');
+  await input.fill('Call plumber tomorrow !high #Home');
+  const preview = page.locator('#quick-add-preview');
+  await expect(preview).toContainText('Adds “Call plumber”');
+  await expect(preview).toContainText('High importance');
+  await expect(preview).toContainText('Home (new tag)');
+  await input.press('Enter');
+  await expect(input).toHaveValue('');
+
+  await expect(page.getByRole('region', { name: /This week/ })).toContainText('Call plumber');
+  await goToAllTasks(page);
+  const r = row(page, 'Call plumber');
+  await expect(r).toContainText('Due tomorrow');
+  await expect(r).toContainText('High importance');
+  await expect(r).toContainText('Home');
+
+  // A second #home reuses the tag instead of creating another.
+  await input.fill('Fix fence #home');
+  await expect(page.locator('#quick-add-preview')).not.toContainText('new tag');
 });

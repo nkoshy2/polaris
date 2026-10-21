@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, expectNoA11yViolations, goToAllTasks, row, test } from './fixtures';
+import { expect, expectNoA11yViolations, goToAllTasks, pickFilter, row, test } from './fixtures';
 
 interface Item {
   externalId: string;
@@ -66,7 +66,7 @@ test('a submission completes the task, and the same assignment in Gradescope is 
   await expect(page.getByRole('status').filter({ hasText: 'Gradescope: completed 1.' })).toBeVisible();
 
   await goToAllTasks(page);
-  await page.getByLabel('Status', { exact: true }).selectOption('all');
+  await pickFilter(page, 'Status', 'Open and completed');
   await expect(row(page, 'Homework 5')).toHaveCount(1);
   await expect(row(page, 'Homework 5')).toContainText('From Canvas and Gradescope');
   await expect(row(page, 'Homework 5')).toContainText('Completed');
@@ -101,7 +101,7 @@ test('a deleted assignment is not added again until it is allowed again', async 
   await goToAllTasks(page);
   await row(page, 'Homework 5').getByRole('button', { name: 'Homework 5' }).click();
   await page.getByRole('button', { name: 'Delete…' }).click();
-  await page.getByRole('button', { name: 'Delete task' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Yes, delete' }).click();
   await expect(row(page, 'Homework 5')).toHaveCount(0);
 
   await sendBatch(page, 'canvas', [hw]);
