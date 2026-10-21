@@ -14,7 +14,7 @@ async function seedVariety(page: import('@playwright/test').Page) {
   await quickAdd(page, 'Plain task');
 }
 
-test('no automatically detectable WCAG A/AA violations across views and dialogs', async ({ app: page }) => {
+async function expectAllViewsAccessible(page: import('@playwright/test').Page) {
   await expectNoA11yViolations(page); // empty state
   await seedVariety(page);
   await expectNoA11yViolations(page); // Focus with content + toast
@@ -44,6 +44,20 @@ test('no automatically detectable WCAG A/AA violations across views and dialogs'
 
   await page.getByRole('button', { name: 'Backup', exact: true }).click();
   await expectNoA11yViolations(page, 'dialog');
+}
+
+test('no automatically detectable WCAG A/AA violations across views and dialogs', async ({ app: page }) => {
+  await expectAllViewsAccessible(page);
+});
+
+test.describe('dark theme', () => {
+  test.use({ colorScheme: 'dark' });
+
+  test('no automatically detectable WCAG A/AA violations across views and dialogs', async ({ app: page }) => {
+    const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    expect(bg).toBe('rgb(30, 24, 18)');
+    await expectAllViewsAccessible(page);
+  });
 });
 
 test('core workflow is keyboard-only operable with visible focus and focus return', async ({ app: page, isMobile }) => {
