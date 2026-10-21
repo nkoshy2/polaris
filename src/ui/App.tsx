@@ -41,7 +41,6 @@ export function App() {
   }));
   const [editor, setEditor] = useState<EditorTarget | null>(null);
   const [dialog, setDialog] = useState<'tags' | 'data' | null>(null);
-  const [navOpen, setNavOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const focusRequest = useRef<{ taskId: string | null; fallback?: string } | null>(null);
 
@@ -56,7 +55,6 @@ export function App() {
   const navigate = useCallback((next: Scope, patch: Partial<Query> = {}, replace = false) => {
     setScope(next);
     setQuery((q) => ({ ...DEFAULT_QUERY, sort: q.sort, dir: q.dir, tag: next.view === 'tasks' ? next.tag : 'any', ...patch }));
-    setNavOpen(false);
     const hash = hashFor(next);
     if (location.hash !== hash) history[replace ? 'replaceState' : 'pushState'](null, '', hash);
     requestAnimationFrame(() => document.getElementById('main-heading')?.focus());
@@ -210,23 +208,16 @@ export function App() {
         Skip to main content
       </a>
       <header class="topbar">
-        <button
-          type="button"
-          class="icon-button nav-toggle"
-          aria-expanded={navOpen}
-          aria-controls="primary-nav"
-          aria-label="Views and tags"
-          onClick={() => setNavOpen(!navOpen)}
-        >
-          <Icon name="menu" size={20} />
-        </button>
         <a class="brand" href="#focus" onClick={(e) => {
           e.preventDefault();
           navigate({ view: 'focus' });
         }}>
-          <Icon name="logo" size={20} />
+          <span class="brand-mark">
+            <Icon name="logo" size={20} />
+          </span>
           <span>Polaris</span>
         </a>
+        <Nav current={scope} onNavigate={(s) => navigate(s)} />
         <form class="search" role="search" onSubmit={(e) => e.preventDefault()}>
           <label for="search" class="sr-only">
             Search tasks
@@ -235,7 +226,7 @@ export function App() {
           <input
             id="search"
             type="search"
-            placeholder="Search tasks"
+            placeholder="Search titles, notes, steps, tags"
             autocomplete="off"
             value={query.text}
             onInput={(e) => {
@@ -257,11 +248,15 @@ export function App() {
         </form>
         <div class="topbar-actions">
           {lastUndo && !readOnly && (
-            <button type="button" class="button" onClick={doUndo} title="Undo (Ctrl+Z)">
+            <button type="button" class="button" onClick={doUndo} title={`Undo: ${lastUndo.label} (Ctrl+Z)`}>
               <Icon name="undo" />
-              Undo<span class="hide-narrow muted">: {lastUndo.label}</span>
+              Undo
             </button>
           )}
+          <button type="button" class="button" onClick={() => setDialog('tags')}>
+            <Icon name="tag" />
+            Tags
+          </button>
           <button type="button" class="button" onClick={() => setDialog('data')}>
             <Icon name="data" />
             Backup
@@ -271,30 +266,19 @@ export function App() {
 
       <Notices onOpenData={() => setDialog('data')} />
 
-      <div class="layout">
-        <Nav
-          current={scope}
-          open={navOpen}
-          onNavigate={(s) => navigate(s)}
-          onManageTags={() => {
-            setNavOpen(false);
-            setDialog('tags');
-          }}
-        />
-        <main id="main">
-          {scope.view === 'focus' ? (
-            <FocusView onShow={showFiltered} />
-          ) : (
-            <TasksView query={query} onQueryChange={changeQuery} />
-          )}
-          <footer class="footer">
-            <p class="muted">
-              Keyboard: <kbd>/</kbd> search · <kbd>n</kbd> new task · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Esc</kbd>{' '}
-              close dialog
-            </p>
-          </footer>
-        </main>
-      </div>
+      <main id="main">
+        {scope.view === 'focus' ? (
+          <FocusView onShow={showFiltered} />
+        ) : (
+          <TasksView query={query} onQueryChange={changeQuery} />
+        )}
+        <footer class="footer">
+          <p class="muted">
+            Keyboard: <kbd>/</kbd> search · <kbd>n</kbd> new task · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Esc</kbd>{' '}
+            close dialog
+          </p>
+        </footer>
+      </main>
 
       <Toasts toasts={toasts} onDismiss={dismissToast} onUndo={doUndo} />
 

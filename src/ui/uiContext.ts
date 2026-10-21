@@ -1,12 +1,20 @@
 import { createContext } from 'preact';
 import { useContext } from 'preact/hooks';
-import type { Task } from '../domain/types';
+import type { Importance, Task } from '../domain/types';
+
+/** Prefilled fields for a new task (e.g. from quick-add shorthand). */
+export interface EditorDraft {
+  title?: string;
+  due?: string | null;
+  importance?: Importance;
+  tagIds?: string[];
+}
 
 export interface EditorTarget {
   /** Existing task to edit, or undefined to create a new one. */
   taskId?: string;
   /** Prefilled fields for a new task. */
-  draft?: { title?: string; tagIds?: string[] };
+  draft?: EditorDraft;
 }
 
 export interface UI {

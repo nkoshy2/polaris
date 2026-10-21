@@ -23,14 +23,15 @@ export async function quickAdd(page: Page, title: string) {
 }
 
 export async function goToAllTasks(page: Page) {
-  await openNavIfCollapsed(page);
   await page.getByRole('navigation', { name: 'Views' }).getByRole('link', { name: /All tasks/ }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'All tasks' })).toBeVisible();
 }
 
-export async function openNavIfCollapsed(page: Page) {
-  const toggle = page.getByRole('button', { name: 'Views and tags' });
-  if ((await toggle.isVisible()) && (await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+/** Changes one word of the All tasks filter sentence, e.g. ("Due", "Today"). */
+export async function pickFilter(page: Page, name: string, option: string) {
+  await page.getByRole('region', { name: 'Filter and sort' }).getByRole('button', { name: new RegExp(`^${name}:`) }).click();
+  await page.getByRole('menuitemradio', { name: option, exact: true }).click();
+  await expect(page.getByRole('menu')).toHaveCount(0);
 }
 
 export function row(page: Page, title: string) {

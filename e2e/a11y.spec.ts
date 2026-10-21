@@ -1,4 +1,4 @@
-import { expect, expectNoA11yViolations, goToAllTasks, openNavIfCollapsed, quickAdd, row, test } from './fixtures';
+import { expect, expectNoA11yViolations, goToAllTasks, pickFilter, quickAdd, row, test } from './fixtures';
 
 async function seedVariety(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: 'Add with details…' }).click();
@@ -20,20 +20,25 @@ test('no automatically detectable WCAG A/AA violations across views and dialogs'
   await expectNoA11yViolations(page); // Focus with content + toast
 
   await goToAllTasks(page);
-  await page.getByLabel('Status', { exact: true }).selectOption('all');
+  await pickFilter(page, 'Status', 'Open and completed');
   await row(page, 'Overdue thing').getByRole('button', { name: /steps/ }).click();
   await expectNoA11yViolations(page);
 
-  await page.getByRole('button', { name: 'Select' }).click();
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
   await expectNoA11yViolations(page);
-  await page.getByRole('button', { name: 'Done selecting' }).click();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+
+  // An open filter menu.
+  await page.getByRole('button', { name: /^Due:/ }).click();
+  await expectNoA11yViolations(page);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: /^Due:/ })).toBeFocused();
 
   await row(page, 'Overdue thing').getByRole('button', { name: 'Overdue thing' }).click();
   await expectNoA11yViolations(page, 'dialog');
   await page.keyboard.press('Escape');
 
-  await openNavIfCollapsed(page);
-  await page.getByRole('button', { name: 'Manage' }).click();
+  await page.getByRole('banner').getByRole('button', { name: 'Tags' }).click();
   await expectNoA11yViolations(page, 'dialog');
   await page.keyboard.press('Escape');
 
@@ -95,14 +100,15 @@ test('respects reduced motion', async ({ browser }) => {
   await context.close();
 });
 
-test('mobile layout: navigation collapses behind a toggle and nothing overflows', async ({ app: page, isMobile }) => {
+test('mobile layout: both views fit the screen without horizontal scrolling', async ({ app: page, isMobile }) => {
   test.skip(!isMobile, 'Mobile-only check.');
-  const nav = page.getByRole('navigation', { name: 'Views' });
-  await expect(nav).toBeHidden();
-  await page.getByRole('button', { name: 'Views and tags' }).click();
-  await expect(nav).toBeVisible();
-  await nav.getByRole('link', { name: /All tasks/ }).click();
-  await expect(nav).toBeHidden();
+  await quickAdd(page, 'A fairly long task title that should wrap rather than overflow tomorrow !high');
+  const fits = async () =>
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  await fits();
+  await page.getByRole('navigation', { name: 'Views' }).getByRole('link', { name: /All tasks/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'All tasks' })).toBeVisible();
+  await fits();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });

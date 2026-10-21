@@ -2,7 +2,7 @@
   "name": "polaris",
   "private": true,
   "version": "0.1.0",
-  "description": "Polaris \u00e2\u20ac\u201d a local-first personal task manager.",
+  "description": "Polaris â€” a local-first personal task manager.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,6 +15,7 @@
     "check": "npm run typecheck && npm test && npm run build && npm run test:e2e"
   },
   "dependencies": {
+    "@fontsource/figtree": "^5.3.0",
     "preact": "^11.0.1"
   },
   "devDependencies": {

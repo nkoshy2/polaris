@@ -10,6 +10,8 @@ interface Props {
   /** Element to focus first; defaults to the first focusable field. */
   initialFocus?: string;
   wide?: boolean;
+  /** Extra class on the <dialog>, for dialogs with their own layout. */
+  class?: string;
 }
 
 /**
@@ -17,7 +19,7 @@ interface Props {
  * Escape handling and an inert background. Focus returns to the element that
  * opened the dialog (when it still exists) after closing.
  */
-export function Dialog({ title, onRequestClose, children, initialFocus, wide }: Props) {
+export function Dialog({ title, onRequestClose, children, initialFocus, wide, class: extra }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useRef(`dlg-${Math.random().toString(36).slice(2)}`).current;
   const pressedBackdrop = useRef(false);
@@ -39,7 +41,7 @@ export function Dialog({ title, onRequestClose, children, initialFocus, wide }: 
   return (
     <dialog
       ref={ref}
-      class={wide ? 'dialog dialog-wide' : 'dialog'}
+      class={`dialog${wide ? ' dialog-wide' : ''}${extra ? ` ${extra}` : ''}`}
       aria-labelledby={titleId}
       onCancel={(e) => {
         e.preventDefault();

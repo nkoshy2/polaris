@@ -7,13 +7,15 @@ no accounts, no server, and your tasks never leave your device.
 
 - **Tasks:** create, edit, complete, reopen, duplicate and delete tasks. Each task can have notes, a due date,
   importance (high, normal or low), tags, and steps.
-- **Focus view:** shows what needs attention now (overdue, due today, high-importance, due soon) using fixed,
-  explained rules rather than a hidden score.
-- **Tags:** the single way to group tasks. A task can have any number of tags, and an Untagged view shows tasks with
-  none.
+- **Focus view:** shows what needs attention now in three lanes (Now, This week, Important) using fixed, explained
+  rules rather than a hidden score.
+- **Quick add:** type “Call plumber fri !high #Home” to set the due date, importance and tags in one line, with a
+  preview before it's added.
+- **Tags:** the single way to group tasks. A task can have any number of tags; All tasks can show one tag, or the
+  untagged tasks.
 - **Search, filters and sorting:** search text across titles, notes, steps and tag names. Filter by status, due date,
-  importance and tag, with visible filter chips and a one-click reset. Sort by recommended order, due date,
-  importance, creation date or title.
+  importance and tag by changing words in a filter sentence, with a one-click reset. Sort by recommended order, due
+  date, importance, creation date or title.
 - **Bulk actions:** complete, reopen, tag or delete several tasks at once.
 - **Undo** for every change, from the toast, the header button, or Ctrl+Z.
 - **Canvas and Gradescope:** with the optional Polaris Connector Chrome extension, assignments become tasks tagged by

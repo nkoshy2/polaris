@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'preact/hooks';
-import { addDays } from '../domain/dates';
+import { addDays, formatDate } from '../domain/dates';
+import { dueDescription } from '../domain/priority';
 import { linkedKinds } from '../domain/sync';
 import { NotFoundError, type TaskInput } from '../domain/tasks';
 import type { Importance, Task } from '../domain/types';
@@ -8,7 +9,7 @@ import { SOURCE_NAMES } from '../state/connector';
 import { useStore, useStoreState } from '../state/context';
 import { Dialog } from './Dialog';
 import { Icon } from './Icon';
-import { useUI } from './uiContext';
+import { useUI, type EditorDraft } from './uiContext';
 
 interface StepRow {
   key: string;
@@ -28,7 +29,7 @@ interface FormState {
 
 interface Props {
   task?: Task;
-  draft?: { title?: string; tagIds?: string[] };
+  draft?: EditorDraft;
   onClose: () => void;
 }
 
@@ -39,17 +40,17 @@ function initialState(task?: Task, draft?: Props['draft']): FormState {
   return {
     title: task?.title ?? draft?.title ?? '',
     notes: task?.notes ?? '',
-    due: task?.due ?? '',
-    importance: task?.importance ?? 'normal',
+    due: task?.due ?? draft?.due ?? '',
+    importance: task?.importance ?? draft?.importance ?? 'normal',
     tagIds: task?.tagIds ?? draft?.tagIds ?? [],
     steps: (task?.steps ?? []).map((s) => ({ key: nextKey(), id: s.id, title: s.title, done: s.done })),
   };
 }
 
 const IMPORTANCE_OPTIONS: { value: Importance; label: string; hint: string }[] = [
-  { value: 'high', label: 'High', hint: 'Consequential — shown in Focus even without a due date' },
-  { value: 'normal', label: 'Normal', hint: 'The default' },
-  { value: 'low', label: 'Low', hint: 'Nice to do' },
+  { value: 'high', label: 'High', hint: 'Matters a lot — shows in Focus even without a date.' },
+  { value: 'normal', label: 'Normal', hint: 'The default.' },
+  { value: 'low', label: 'Low', hint: 'Nice to do, whenever.' },
 ];
 
 export function TaskEditor({ task, draft, onClose }: Props) {
@@ -175,214 +176,243 @@ export function TaskEditor({ task, draft, onClose }: Props) {
     { label: 'Today', value: today },
     { label: 'Tomorrow', value: addDays(today, 1) },
     { label: 'In a week', value: addDays(today, 7) },
+    { label: 'No date', value: '' },
   ];
 
+  const stepsDone = form.steps.filter((st) => st.done).length;
+  const dueText = form.due
+    ? `${formatDate(form.due, today)} · ${dueDescription({ due: form.due, completedAt: null } as Task, today)}`
+    : 'No due date';
+
   return (
-    <Dialog title={isNew ? 'New task' : 'Edit task'} onRequestClose={requestClose} initialFocus="#task-title" wide>
+    <Dialog
+      title={isNew ? 'New task' : 'Edit task'}
+      onRequestClose={requestClose}
+      initialFocus="#task-title"
+      wide
+      class="dialog-editor"
+    >
       <form ref={formRef} class="editor" onSubmit={save} noValidate>
-        {errors.form && (
-          <p class="form-error" role="alert">
-            {errors.form}
-          </p>
-        )}
-        {readOnly && <p class="form-error">Editing is disabled while Polaris is in read-only mode.</p>}
-        {task?.source && <SourceBox task={task} />}
+        <div class="editor-columns">
+          <div class="editor-main">
+            {errors.form && (
+              <p class="form-error" role="alert">
+                {errors.form}
+              </p>
+            )}
+            {readOnly && <p class="form-error">Editing is disabled while Polaris is in read-only mode.</p>}
 
-        <div class="field">
-          <label for="task-title">Title</label>
-          <input
-            id="task-title"
-            type="text"
-            required
-            maxLength={LIMITS.title}
-            value={form.title}
-            autocomplete="off"
-            onInput={(e) => update({ title: e.currentTarget.value })}
-            {...errProps('title')}
-          />
-          {fieldError('title')}
-        </div>
+            <div class="field">
+              <label for="task-title" class="sr-only">
+                Title
+              </label>
+              <input
+                id="task-title"
+                class="title-input"
+                type="text"
+                required
+                placeholder="Task title"
+                maxLength={LIMITS.title}
+                value={form.title}
+                autocomplete="off"
+                onInput={(e) => update({ title: e.currentTarget.value })}
+                {...errProps('title')}
+              />
+              {fieldError('title')}
+            </div>
 
-        <div class="field">
-          <label for="task-notes">
-            Notes <span class="optional">(optional)</span>
-          </label>
-          <textarea id="task-notes" rows={3} value={form.notes} onInput={(e) => update({ notes: e.currentTarget.value })} {...errProps('notes')} />
-          {fieldError('notes')}
-        </div>
+            {task?.source && <SourceBox task={task} />}
 
-        <div class="field-row">
-          <fieldset class="field">
-            <legend>
-              Due date <span class="optional">(optional)</span>
-            </legend>
-            <div class="due-row">
+            <div class="field">
+              <label for="task-notes">Notes</label>
+              <textarea
+                id="task-notes"
+                rows={3}
+                placeholder="Anything worth remembering"
+                value={form.notes}
+                onInput={(e) => update({ notes: e.currentTarget.value })}
+                {...errProps('notes')}
+              />
+              {fieldError('notes')}
+            </div>
+
+            <fieldset class="field">
+              <legend>
+                Steps{' '}
+                <span class="optional">
+                  {form.steps.length ? `${stepsDone} of ${form.steps.length} done` : 'None yet'}
+                </span>
+              </legend>
+              {form.steps.length > 0 && (
+                <>
+                  <span class="bar" aria-hidden="true">
+                    <span style={{ width: `${Math.floor((stepsDone / form.steps.length) * 100)}%` }} />
+                  </span>
+                  <ol class="step-editor">
+                    {form.steps.map((step, i) => (
+                      <li key={step.key}>
+                        <input
+                          type="checkbox"
+                          class="step-check"
+                          checked={step.done}
+                          aria-label={`Step ${i + 1} done`}
+                          onChange={(e) => {
+                            const done = e.currentTarget.checked;
+                            update({ steps: form.steps.map((st) => (st.key === step.key ? { ...st, done } : st)) });
+                          }}
+                        />
+                        <input
+                          type="text"
+                          class={step.done ? 'step-title step-done' : 'step-title'}
+                          value={step.title}
+                          maxLength={LIMITS.title}
+                          aria-label={`Step ${i + 1}`}
+                          onInput={(e) => {
+                            const title = e.currentTarget.value;
+                            update({ steps: form.steps.map((st) => (st.key === step.key ? { ...st, title } : st)) });
+                          }}
+                          onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                        />
+                        <button
+                          type="button"
+                          class="icon-button"
+                          aria-label={`Remove step ${i + 1}: ${step.title}`}
+                          onClick={() => {
+                            update({ steps: form.steps.filter((st) => st.key !== step.key) });
+                            requestAnimationFrame(() => document.getElementById('new-step')?.focus());
+                          }}
+                        >
+                          <Icon name="close" size={15} />
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              )}
+              <div class="inline-add">
+                <label for="new-step" class="sr-only">
+                  New step
+                </label>
+                <input
+                  id="new-step"
+                  type="text"
+                  placeholder="Add a step and press Enter"
+                  maxLength={LIMITS.title}
+                  value={newStep}
+                  onInput={(e) => setNewStep(e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addStep();
+                    }
+                  }}
+                  {...errProps('steps')}
+                />
+                <button type="button" class="button small" onClick={addStep}>
+                  Add step
+                </button>
+              </div>
+              {fieldError('steps')}
+              <p class="hint">
+                Completing the task marks every step done; finishing all steps doesn't complete the task for you.
+              </p>
+            </fieldset>
+          </div>
+
+          <div class="editor-side">
+            <fieldset class="field">
+              <legend>Due</legend>
+              <p class="due-text">{dueText}</p>
+              <div class="quick-dates" role="group" aria-label="Quick dates">
+                {quickDates.map((d) => (
+                  <button type="button" class="chip" aria-pressed={form.due === d.value} onClick={() => update({ due: d.value })}>
+                    {d.label}
+                  </button>
+                ))}
+              </div>
               <label for="task-due" class="sr-only">
                 Due date
               </label>
               <input id="task-due" type="date" value={form.due} onInput={(e) => update({ due: e.currentTarget.value })} {...errProps('due')} />
-              {form.due && (
-                <button type="button" class="button small" onClick={() => update({ due: '' })}>
-                  Remove date
-                </button>
-              )}
-            </div>
-            <div class="quick-dates" role="group" aria-label="Quick dates">
-              {quickDates.map((d) => (
-                <button type="button" class="chip" aria-pressed={form.due === d.value} onClick={() => update({ due: d.value })}>
-                  {d.label}
-                </button>
-              ))}
-            </div>
-            {fieldError('due')}
-          </fieldset>
+              {fieldError('due')}
+            </fieldset>
 
-          <fieldset class="field">
-            <legend>Importance</legend>
-            <p class="hint" id="importance-hint">
-              How much it matters — separate from when it's due.
-            </p>
-            {IMPORTANCE_OPTIONS.map((o) => (
-              <label class="radio" key={o.value}>
-                <input
-                  type="radio"
-                  name="importance"
-                  value={o.value}
-                  checked={form.importance === o.value}
-                  onChange={() => update({ importance: o.value })}
-                  aria-describedby={`imp-${o.value}`}
-                />
-                <span>
-                  {o.label}
-                  <span class="hint" id={`imp-${o.value}`}>
-                    {' '}
-                    — {o.hint}
-                  </span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
-        </div>
-
-        <fieldset class="field">
-          <legend>Tags</legend>
-          {data.tags.length > 0 ? (
-            <div class="tag-options">
-              {data.tags.map((tag) => (
-                <label class="tag-option" key={tag.id}>
+            <fieldset class="field">
+              <legend>Importance</legend>
+              {IMPORTANCE_OPTIONS.map((o) => (
+                <label class="choice-card" key={o.value}>
                   <input
-                    type="checkbox"
-                    checked={form.tagIds.includes(tag.id)}
-                    onChange={(e) =>
-                      update({
-                        tagIds: e.currentTarget.checked ? [...form.tagIds, tag.id] : form.tagIds.filter((id) => id !== tag.id),
-                      })
-                    }
+                    type="radio"
+                    name="importance"
+                    value={o.value}
+                    checked={form.importance === o.value}
+                    onChange={() => update({ importance: o.value })}
+                    aria-describedby={`imp-${o.value}`}
                   />
-                  <span>{tag.name}</span>
+                  <span>
+                    <strong>{o.label}</strong>
+                    <span class="hint" id={`imp-${o.value}`}>
+                      {o.hint}
+                    </span>
+                  </span>
                 </label>
               ))}
-            </div>
-          ) : (
-            <p class="hint">No tags yet. Tags let you group tasks however you like, such as by project or area.</p>
-          )}
-          <div class="inline-add">
-            <label for="new-tag" class="sr-only">
-              New tag name
-            </label>
-            <input
-              id="new-tag"
-              type="text"
-              placeholder="New tag"
-              maxLength={LIMITS.tagName}
-              value={newTag}
-              onInput={(e) => setNewTag(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  createTag();
-                }
-              }}
-              {...errProps('tagName')}
-            />
-            <button type="button" class="button small" onClick={createTag} disabled={readOnly}>
-              Create tag
-            </button>
-          </div>
-          {fieldError('tagName')}
-          {fieldError('tags')}
-        </fieldset>
+            </fieldset>
 
-        <fieldset class="field">
-          <legend>Steps</legend>
-          <p class="hint">
-            Break the task into smaller steps. Completing the task marks every step done; finishing all steps
-            doesn't complete the task for you.
-          </p>
-          {form.steps.length > 0 && (
-            <ol class="step-editor">
-              {form.steps.map((step, i) => (
-                <li key={step.key}>
-                  <input
-                    type="checkbox"
-                    checked={step.done}
-                    aria-label={`Step ${i + 1} done`}
-                    onChange={(e) => {
-                      const done = e.currentTarget.checked;
-                      update({ steps: form.steps.map((s) => (s.key === step.key ? { ...s, done } : s)) });
-                    }}
-                  />
-                  <input
-                    type="text"
-                    value={step.title}
-                    maxLength={LIMITS.title}
-                    aria-label={`Step ${i + 1}`}
-                    onInput={(e) => {
-                      const title = e.currentTarget.value;
-                      update({ steps: form.steps.map((s) => (s.key === step.key ? { ...s, title } : s)) });
-                    }}
-                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
-                  />
-                  <button
-                    type="button"
-                    class="icon-button"
-                    aria-label={`Remove step ${i + 1}: ${step.title}`}
-                    onClick={() => {
-                      update({ steps: form.steps.filter((s) => s.key !== step.key) });
-                      requestAnimationFrame(() => document.getElementById('new-step')?.focus());
-                    }}
-                  >
-                    <Icon name="close" />
-                  </button>
-                </li>
-              ))}
-            </ol>
-          )}
-          <div class="inline-add">
-            <label for="new-step" class="sr-only">
-              New step
-            </label>
-            <input
-              id="new-step"
-              type="text"
-              placeholder="Add a step"
-              maxLength={LIMITS.title}
-              value={newStep}
-              onInput={(e) => setNewStep(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  addStep();
-                }
-              }}
-              {...errProps('steps')}
-            />
-            <button type="button" class="button small" onClick={addStep}>
-              Add step
-            </button>
+            <fieldset class="field">
+              <legend>Tags</legend>
+              {data.tags.length > 0 ? (
+                <div class="tag-options">
+                  {data.tags.map((tag) => {
+                    const on = form.tagIds.includes(tag.id);
+                    return (
+                      <label class="tag-option" key={tag.id}>
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={(e) =>
+                            update({
+                              tagIds: e.currentTarget.checked ? [...form.tagIds, tag.id] : form.tagIds.filter((id) => id !== tag.id),
+                            })
+                          }
+                        />
+                        <Icon name={on ? 'check' : 'plus'} size={14} />
+                        <span>{tag.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p class="hint">No tags yet. Tags group tasks however you like, such as by project or area.</p>
+              )}
+              <div class="inline-add">
+                <label for="new-tag" class="sr-only">
+                  New tag name
+                </label>
+                <input
+                  id="new-tag"
+                  type="text"
+                  placeholder="New tag"
+                  maxLength={LIMITS.tagName}
+                  value={newTag}
+                  onInput={(e) => setNewTag(e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      createTag();
+                    }
+                  }}
+                  {...errProps('tagName')}
+                />
+                <button type="button" class="button small" onClick={createTag} disabled={readOnly}>
+                  Create tag
+                </button>
+              </div>
+              {fieldError('tagName')}
+              {fieldError('tags')}
+            </fieldset>
           </div>
-          {fieldError('steps')}
-        </fieldset>
+        </div>
 
         {confirmDiscard && (
           <div class="confirm-box" role="alert">
@@ -398,42 +428,40 @@ export function TaskEditor({ task, draft, onClose }: Props) {
           </div>
         )}
 
-        {confirmDelete && task && (
-          <div class="confirm-box" role="alert">
-            <p>
-              Delete “{task.title}”{task.steps.length > 0 ? ` and its ${task.steps.length} steps` : ''}? You can undo
-              this right after.
-            </p>
-            <div class="button-row">
-              <button type="button" class="button danger" onClick={remove}>
-                Delete task
-              </button>
+        <div class="editor-footer">
+          {confirmDelete && task ? (
+            <>
+              <p class="confirm-text" role="alert">
+                Delete “{task.title}”{task.steps.length > 0 ? ` and its ${task.steps.length} steps` : ''}? You can undo.
+              </p>
               <button type="button" class="button" onClick={() => setConfirmDelete(false)}>
+                Keep
+              </button>
+              <button type="button" class="button danger" onClick={remove}>
+                Yes, delete
+              </button>
+            </>
+          ) : (
+            <>
+              {task && (
+                <>
+                  <button type="button" class="button ghost" disabled={readOnly} onClick={() => setConfirmDelete(true)}>
+                    Delete…
+                  </button>
+                  <button type="button" class="button" disabled={readOnly} onClick={duplicate}>
+                    Duplicate
+                  </button>
+                </>
+              )}
+              <span class="spacer" />
+              <button type="button" class="button" onClick={requestClose}>
                 Cancel
               </button>
-            </div>
-          </div>
-        )}
-
-        <div class="editor-footer">
-          {task && (
-            <div class="button-row">
-              <button type="button" class="button danger-outline" disabled={readOnly} onClick={() => setConfirmDelete(true)}>
-                Delete…
+              <button type="submit" class="button primary" disabled={readOnly}>
+                {isNew ? 'Add task' : 'Save'}
               </button>
-              <button type="button" class="button" disabled={readOnly} onClick={duplicate}>
-                Duplicate
-              </button>
-            </div>
+            </>
           )}
-          <div class="button-row end">
-            <button type="button" class="button" onClick={requestClose}>
-              Cancel
-            </button>
-            <button type="submit" class="button primary" disabled={readOnly}>
-              {isNew ? 'Add task' : 'Save'}
-            </button>
-          </div>
         </div>
       </form>
     </Dialog>
