@@ -56,7 +56,53 @@
   line-height: 1.5;
   color: var(--color-text);
   background: var(--color-bg);
-  color-scheme: light;
+  color-scheme: light dark;
+}
+
+/*
+ * Dark theme: a warm brown-black ground with cream text. The ramps run the
+ * other way (100 is the darkest surface, 900 the lightest fill), so pairs such
+ * as neutral-100 text on an accent-700 fill keep their contrast. The few pairs
+ * that don't flip cleanly are fixed under "Dark theme pairs" at the end.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #1e1812;
+    --color-surface: #272019;
+    --color-text: #f1e8da;
+    --color-accent: #d2824e;
+    --color-divider: color-mix(in srgb, #f1e8da 16%, transparent);
+
+    --color-neutral-100: #2f2921;
+    --color-neutral-200: #39332a;
+    --color-neutral-300: #494338;
+    --color-neutral-400: #5f574a;
+    --color-neutral-500: #7c7365;
+    --color-neutral-600: #948b7b;
+    --color-neutral-700: #b6ad9d;
+    --color-neutral-800: #cfc6b8;
+    --color-neutral-900: #eee7dc;
+
+    --color-accent-100: #2f1f16;
+    --color-accent-200: #4a2d1d;
+    --color-accent-300: #815032;
+    --color-accent-500: #b86937;
+    --color-accent-600: #d17d47;
+    --color-accent-700: #e19767;
+    --color-accent-800: #f0b690;
+    --color-accent-900: #f8d2b8;
+
+    --color-accent-2-100: #212619;
+    --color-accent-2-700: #a6ba85;
+    --color-accent-2-800: #c1d2a8;
+
+    --color-ochre-100: oklch(0.26 0.035 85);
+    --color-ochre-700: oklch(0.76 0.1 75);
+
+    --shadow-sm: 0 1px 2px color-mix(in srgb, #000 40%, transparent);
+    --shadow-md: 0 3px 10px color-mix(in srgb, #000 45%, transparent);
+    --shadow-lg: 0 12px 32px color-mix(in srgb, #000 55%, transparent);
+  }
 }
 
 *,
@@ -292,7 +338,7 @@ select,
 textarea {
   min-height: var(--tap);
   padding: 0 16px;
-  border: 1.5px solid var(--color-neutral-500);
+  border: 1.5px solid var(--color-neutral-600);
   border-radius: var(--radius-pill);
   background: var(--color-neutral-100);
   color: var(--color-text);
@@ -1974,6 +2020,40 @@ fieldset > legend {
 
   .hide-narrow {
     display: none;
+  }
+}
+
+/* ---- Dark theme pairs ---------------------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  /* Cards are lighter than their lane in the dark, so the plain lane drops a step. */
+  .lane-week {
+    background: var(--color-surface);
+  }
+
+  /* A cream scrim would light the page up; dim it instead. */
+  .dialog::backdrop {
+    background: color-mix(in srgb, #000 60%, transparent);
+  }
+
+  /* The toast is a cream pill here, so its action needs a dark terracotta. */
+  .toast .button {
+    color: var(--color-accent-200);
+  }
+
+  /* The accent ring is too close to the cream toast; use the dark terracotta. */
+  .toast :focus-visible {
+    outline-color: var(--color-accent-200);
+  }
+
+  /* Check marks are drawn in the dark neutral-100 on the light sage fill. */
+  input.task-check:checked,
+  input.step-check:checked {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232f2921' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+  }
+
+  input.select-check:indeterminate {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232f2921' stroke-width='3.5' stroke-linecap='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E");
   }
 }
 

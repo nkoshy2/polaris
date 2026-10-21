@@ -187,7 +187,14 @@ allow personal access tokens) and hands them to the Polaris tab. The merge rules
 
 The look follows the Organic design system: a cream-and-sand ground, a terracotta accent for actions and overdue
 items, sage only for completion (checkboxes and progress), and ochre for the Important lane. Colours are the system's
-OKLCH tonal ramps, defined once at the top of `src/styles.css`. The theme is light only.
+OKLCH tonal ramps, defined once at the top of `src/styles.css`.
+
+The theme follows the system setting (`prefers-color-scheme`). The design system only defines light colours, so the
+dark theme is Polaris's own: a warm brown-black ground with cream text, keeping the same terracotta, sage and ochre
+roles. Its ramps run the other way (100 is the darkest surface, 900 the lightest fill), so most text-on-fill pairs keep
+their contrast without changes; the few that don't flip cleanly (the plain Focus lane, the dialog scrim, the toast's
+action and focus ring, and the check marks) are overridden at the end of the stylesheet. Both themes meet WCAG AA for
+text and 3:1 for focus rings and form-field borders, and `e2e/a11y.spec.ts` runs axe in both.
 
 Figtree is bundled with the app (`@fontsource/figtree`) rather than loaded from Google Fonts, so Polaris still makes
 no network requests.
